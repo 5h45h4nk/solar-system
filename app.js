@@ -25,13 +25,14 @@ if (!ctx) {
 }
 
 const TAU = Math.PI * 2;
-const CAMERA_MIN_RADIUS = 35;
+const CAMERA_MIN_RADIUS = 0.05;
 const CAMERA_MAX_RADIUS = 9000;
 const PHYSICAL_DISTANCE_SCALE = 120;
 const EARTH_VISUAL_RADIUS = 5.7;
-const EARTH_DIAMETER_KM = 12742;
-const SUN_DIAMETER_KM = 1392700;
 const EDUCATIONAL_BASE_DAYS_PER_SECOND = 40;
+const SATELLITE_ORBIT_VIS_SCALE = 0.22;
+const AU_KM = 149597870;
+const SUN_RADIUS_AU = 696340 / AU_KM;
 
 const camera = {
   target: { x: 0, y: 0, z: 0 },
@@ -476,7 +477,7 @@ for (const p of planets) {
   p.educationalRadius = p.radius;
   p.educationalDistance = p.distance;
   p.educationalSpinSpeed = p.spinSpeed;
-  p.physicalRadius = EARTH_VISUAL_RADIUS * (p.diameterKm / EARTH_DIAMETER_KM);
+  p.physicalRadius = ((p.diameterKm * 0.5) / AU_KM) * PHYSICAL_DISTANCE_SCALE;
   p.physicalDistance = p.distanceAU * PHYSICAL_DISTANCE_SCALE;
   p.spinPeriodDays = (p.spinPeriodHours || 24) / 24;
   p.moons = (majorMoonDefs[p.name] || []).map((m, idx) => ({
@@ -493,7 +494,19 @@ function updateMoonScales() {
   for (const p of planets) {
     for (const m of p.moons || []) {
       m.radius = clamp((m.diameterKm / p.diameterKm) * p.radius, 0.45, p.radius * 0.42);
-      m.orbitDistance = clamp(m.distanceInPlanetRadii * p.radius, p.radius * 2.1, p.radius * 55);
+      if (simulation.scaleMode === "physical") {
+        const planetRadiusKm = p.diameterKm * 0.5;
+        const moonOrbitKm = m.distanceInPlanetRadii * planetRadiusKm;
+        const moonOrbitAU = moonOrbitKm / AU_KM;
+        m.orbitDistance = moonOrbitAU * PHYSICAL_DISTANCE_SCALE;
+        m.radius = (m.diameterKm * 0.5 / AU_KM) * PHYSICAL_DISTANCE_SCALE;
+      } else {
+        m.orbitDistance = clamp(
+          m.distanceInPlanetRadii * p.radius * SATELLITE_ORBIT_VIS_SCALE,
+          p.radius * 2.1,
+          p.radius * 22
+        );
+      }
     }
   }
 }
@@ -523,8 +536,7 @@ const sun = {
   position: vec(0, 0, 0),
   radius: 22,
   educationalRadius: 22,
-  // Compressed physical scaling to keep the scene explorable while preserving "bigger than planets" relation.
-  physicalRadius: Math.min(150, EARTH_VISUAL_RADIUS * (SUN_DIAMETER_KM / EARTH_DIAMETER_KM) * 0.18),
+  physicalRadius: SUN_RADIUS_AU * PHYSICAL_DISTANCE_SCALE,
   spin: 0,
 };
 
@@ -595,7 +607,15 @@ function flyToOverview() {
 function flyToPlanet(planet) {
   if (!planet) return;
   selectedPlanet = planet;
-  const dist = clamp(planet.radius * 14 + 40, 85, 650);
+  let dist;
+  if (simulation.scaleMode === "physical") {
+    const moonOrbits = (planet.moons || []).map((m) => m.orbitDistance || 0);
+    const maxMoonOrbit = moonOrbits.length > 0 ? Math.max(...moonOrbits) : 0;
+    const targetFrame = maxMoonOrbit > 0 ? maxMoonOrbit * 1.85 : planet.radius * 220;
+    dist = clamp(targetFrame, 0.22, 180);
+  } else {
+    dist = clamp(planet.radius * 14 + 40, 16, 650);
+  }
   startFly(planet.position, dist, camera.yaw + 0.8, 0.22, 1900);
   planetSelect.value = planet.name;
   refreshInfoPanel();
@@ -680,13 +700,13 @@ if (satellitesToggle) {
 
 if (zoomInBtn) {
   zoomInBtn.addEventListener("click", () => {
-    camera.radius = clamp(camera.radius * 0.86, CAMERA_MIN_RADIUS, CAMERA_MAX_RADIUS);
+    camera.radius = clamp(camera.radius * 0.55, CAMERA_MIN_RADIUS, CAMERA_MAX_RADIUS);
   });
 }
 
 if (zoomOutBtn) {
   zoomOutBtn.addEventListener("click", () => {
-    camera.radius = clamp(camera.radius * 1.16, CAMERA_MIN_RADIUS, CAMERA_MAX_RADIUS);
+    camera.radius = clamp(camera.radius * 1.38, CAMERA_MIN_RADIUS, CAMERA_MAX_RADIUS);
   });
 }
 
@@ -799,7 +819,7 @@ canvas.addEventListener("pointerleave", () => {
 canvas.addEventListener("wheel", (e) => {
   e.preventDefault();
   const delta = Math.sign(e.deltaY);
-  camera.radius = clamp(camera.radius * (1 + delta * 0.08), CAMERA_MIN_RADIUS, CAMERA_MAX_RADIUS);
+  camera.radius = clamp(camera.radius * (1 + delta * 0.22), CAMERA_MIN_RADIUS, CAMERA_MAX_RADIUS);
 }, { passive: false });
 
 if (fullscreenBtn) {
@@ -901,7 +921,7 @@ function drawMoonOrbit(planet, moon, basis) {
     projected[i] = project(vec(planet.position.x + x, planet.position.y + y, planet.position.z + z), basis);
   }
 
-  ctx.strokeStyle = "rgba(170,185,215,0.23)";
+  ctx.strokeStyle = "rgba(236, 222, 168, 0.28)";
   ctx.lineWidth = 0.7;
   for (let i = 0; i < steps; i += 1) {
     const a = projected[i];
@@ -936,13 +956,23 @@ function drawSphere(screen, rPx, baseColor, glow = false) {
 }
 
 function drawSunCorona(screen, rPx) {
-  const corona = ctx.createRadialGradient(screen.x, screen.y, rPx * 0.95, screen.x, screen.y, rPx * 1.32);
+  const visibleR = Math.max(rPx, 1.25);
+  const corona = ctx.createRadialGradient(screen.x, screen.y, visibleR * 0.9, screen.x, screen.y, visibleR * 2.2);
   corona.addColorStop(0, "rgba(255, 190, 95, 0.22)");
-  corona.addColorStop(0.45, "rgba(255, 155, 60, 0.12)");
+  corona.addColorStop(0.45, "rgba(255, 155, 60, 0.2)");
   corona.addColorStop(1, "rgba(255, 130, 40, 0)");
   ctx.fillStyle = corona;
   ctx.beginPath();
-  ctx.arc(screen.x, screen.y, rPx * 1.32, 0, TAU);
+  ctx.arc(screen.x, screen.y, visibleR * 2.2, 0, TAU);
+  ctx.fill();
+
+  // Bright core dot so the Sun remains visible even at true physical scale.
+  const core = ctx.createRadialGradient(screen.x, screen.y, 0, screen.x, screen.y, Math.max(visibleR * 1.1, 2.2));
+  core.addColorStop(0, "rgba(255, 240, 190, 0.95)");
+  core.addColorStop(1, "rgba(255, 190, 95, 0)");
+  ctx.fillStyle = core;
+  ctx.beginPath();
+  ctx.arc(screen.x, screen.y, Math.max(visibleR * 1.1, 2.2), 0, TAU);
   ctx.fill();
 }
 
@@ -1294,7 +1324,8 @@ function renderBodies(basis) {
 
   for (const e of entries) {
     if (e.type === "sun") {
-      const rPx = clamp(sun.radius * e.screen.scalePx, 3, 200);
+      const minSunPx = simulation.scaleMode === "physical" ? 1.1 : 3;
+      const rPx = clamp(sun.radius * e.screen.scalePx, minSunPx, 200);
       drawSunCorona(e.screen, rPx);
       const sunViewDir = normalize(sub(camera.position, sun.position));
       const sunPhaseU = Math.atan2(sunViewDir.x, sunViewDir.z) / TAU;
@@ -1303,12 +1334,14 @@ function renderBodies(basis) {
     }
 
     if (e.type === "satellite") {
-      const mrPx = clamp(e.moon.radius * e.screen.scalePx, 0.7, 10);
+      const minMoonPx = simulation.scaleMode === "physical" ? 0.12 : 0.7;
+      const mrPx = clamp(e.moon.radius * e.screen.scalePx, minMoonPx, 10);
       drawSphere(e.screen, mrPx, e.moon.color || "#c4ccd9", false);
       continue;
     }
 
-    const rPx = clamp(e.planet.radius * e.screen.scalePx, 1.3, 100);
+    const minPlanetPx = simulation.scaleMode === "physical" ? 0.12 : 1.3;
+    const rPx = clamp(e.planet.radius * e.screen.scalePx, minPlanetPx, 100);
     projectedPlanets.push({
       planet: e.planet,
       x: e.screen.x,
