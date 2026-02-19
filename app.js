@@ -1545,6 +1545,18 @@ function shadeSphereBySun(screen, rPx, lightCam, glossy = 0.25, sunVisibility = 
   ctx.arc(screen.x, screen.y, rPx, 0, TAU);
   ctx.fill();
 
+  // Force the anti-solar hemisphere darker so only sun-facing areas read as illuminated.
+  const nightStrength = clamp(1 - ambient * 1.35, 0.35, 0.95);
+  const nightMask = ctx.createLinearGradient(litX, litY, darkX, darkY);
+  nightMask.addColorStop(0, "rgba(0,0,0,0)");
+  nightMask.addColorStop(0.48, "rgba(0,0,0,0)");
+  nightMask.addColorStop(0.62, `rgba(0,0,0,${0.34 * nightStrength})`);
+  nightMask.addColorStop(1, `rgba(0,0,0,${0.9 * nightStrength})`);
+  ctx.fillStyle = nightMask;
+  ctx.beginPath();
+  ctx.arc(screen.x, screen.y, rPx, 0, TAU);
+  ctx.fill();
+
   // Fresnel-like rim darkening.
   const rim = ctx.createRadialGradient(screen.x, screen.y, rPx * 0.55, screen.x, screen.y, rPx * 1.02);
   rim.addColorStop(0, "rgba(0,0,0,0)");
