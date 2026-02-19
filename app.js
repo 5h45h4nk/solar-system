@@ -186,8 +186,7 @@ function updateZoomOverlayOffset() {
     return;
   }
 
-  const expanded = !hudEl.classList.contains("collapsed");
-  const offset = expanded ? hudEl.offsetHeight + 8 : 0;
+  const offset = hudEl.offsetHeight + 8;
   document.documentElement.style.setProperty("--zoom-overlay-offset", `${offset}px`);
 }
 
