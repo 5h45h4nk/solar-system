@@ -491,6 +491,21 @@ for (const p of planets) {
 }
 
 function updateMoonScales() {
+  const sortedByOrbit = [...planets].sort((a, b) => a.distance - b.distance);
+  const orbitBudgetByPlanet = new Map();
+
+  for (let i = 0; i < sortedByOrbit.length; i += 1) {
+    const p = sortedByOrbit[i];
+    const prev = i > 0 ? sortedByOrbit[i - 1] : null;
+    const next = i < sortedByOrbit.length - 1 ? sortedByOrbit[i + 1] : null;
+    const gapPrev = prev ? p.distance - prev.distance : Infinity;
+    const gapNext = next ? next.distance - p.distance : Infinity;
+    const nearestGap = Math.min(gapPrev, gapNext);
+    // Keep moon systems well inside local orbital neighborhood.
+    const localBudget = Number.isFinite(nearestGap) ? nearestGap * 0.28 : p.distance * 0.08;
+    orbitBudgetByPlanet.set(p.name, Math.max(localBudget, p.radius * 3));
+  }
+
   for (const p of planets) {
     for (const m of p.moons || []) {
       m.radius = clamp((m.diameterKm / p.diameterKm) * p.radius, 0.45, p.radius * 0.42);
@@ -501,11 +516,8 @@ function updateMoonScales() {
         m.orbitDistance = moonOrbitAU * PHYSICAL_DISTANCE_SCALE;
         m.radius = (m.diameterKm * 0.5 / AU_KM) * PHYSICAL_DISTANCE_SCALE;
       } else {
-        m.orbitDistance = clamp(
-          m.distanceInPlanetRadii * p.radius * SATELLITE_ORBIT_VIS_SCALE,
-          p.radius * 2.1,
-          p.radius * 22
-        );
+        const localOrbitBudget = orbitBudgetByPlanet.get(p.name) || p.radius * 8;
+        m.orbitDistance = clamp(m.distanceInPlanetRadii * p.radius * SATELLITE_ORBIT_VIS_SCALE, p.radius * 2.1, localOrbitBudget);
       }
     }
   }
