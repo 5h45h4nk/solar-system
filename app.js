@@ -25,8 +25,8 @@ if (!ctx) {
 
 const TAU = Math.PI * 2;
 const CAMERA_MIN_RADIUS = 35;
-const CAMERA_MAX_RADIUS = 3500;
-const PHYSICAL_DISTANCE_SCALE = 55;
+const CAMERA_MAX_RADIUS = 9000;
+const PHYSICAL_DISTANCE_SCALE = 120;
 const EARTH_VISUAL_RADIUS = 5.7;
 const EARTH_DIAMETER_KM = 12742;
 const SUN_DIAMETER_KM = 1392700;
@@ -495,6 +495,14 @@ function refreshInfoPanel() {
   updatePlanetInfo(null);
 }
 
+function getMaxOrbitDistance() {
+  let maxD = 0;
+  for (const p of planets) {
+    if (p.distance > maxD) maxD = p.distance;
+  }
+  return maxD;
+}
+
 function startFly(toTarget, toRadius, toYaw = camera.yaw, toPitch = camera.pitch, duration = 1800) {
   flyTransition = {
     start: performance.now(),
@@ -512,7 +520,7 @@ function startFly(toTarget, toRadius, toYaw = camera.yaw, toPitch = camera.pitch
 
 function flyToOverview() {
   selectedPlanet = null;
-  const overviewRadius = simulation.scaleMode === "physical" ? 1700 : 520;
+  const overviewRadius = clamp(getMaxOrbitDistance() * 1.45, 520, 5200);
   startFly(vec(0, 0, 0), overviewRadius, 0.2, 0.28, 1600);
   refreshInfoPanel();
 }
