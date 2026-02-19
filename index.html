@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Solar System Explorer</title>
+    <link rel="preconnect" href="https://cdn.jsdelivr.net" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="icon" href="data:," />
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="hud">
+      <div class="title-wrap">
+        <h1>Solar System Explorer</h1>
+        <p>Search any planet and take a guided fly-over.</p>
+      </div>
+      <div class="controls">
+        <label for="planet-search">Planet</label>
+        <select id="planet-search">
+          <option value="" selected>Select a planet...</option>
+        </select>
+        <label for="speed-slider">Orbit Speed (days/second)</label>
+        <input id="speed-slider" type="range" min="0" max="800" step="1" value="40" />
+        <div class="sim-stats">
+          <span id="speed-value">40 days/s</span>
+          <span id="years-value">0.00 years elapsed</span>
+        </div>
+        <button id="fly-btn" type="button">Fly To Planet</button>
+        <button id="overview-btn" type="button">Overview (Sun + All Planets)</button>
+      </div>
+      <div id="planet-info" class="planet-info">Loading...</div>
+    </div>
+    <canvas id="scene"></canvas>
+
+    <script type="module" src="./app.js"></script>
+  </body>
+</html>
