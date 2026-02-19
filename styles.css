@@ -146,6 +146,33 @@ button:hover {
   opacity: 0.9;
 }
 
+.zoom-controls {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.zoom-overlay {
+  position: fixed;
+  left: 50%;
+  bottom: calc(env(safe-area-inset-bottom, 0px) + 0.6rem);
+  transform: translateX(-50%);
+  z-index: 12;
+  background: rgba(5, 12, 26, 0.38);
+  border: 1px solid rgba(150, 195, 255, 0.28);
+  border-radius: 999px;
+  padding: 0.35rem;
+  backdrop-filter: blur(8px);
+}
+
+.zoom-overlay button {
+  min-width: 110px;
+  padding: 0.5rem 0.75rem;
+  border-radius: 999px;
+  font-size: 0.82rem;
+  background: rgba(24, 67, 135, 0.72);
+  border: 1px solid rgba(145, 190, 255, 0.35);
+}
+
 @media (max-width: 720px) {
   .hud {
     top: auto;
@@ -169,5 +196,14 @@ button:hover {
 
   .hud.collapsed .hud-body {
     display: none;
+  }
+
+  .zoom-overlay {
+    bottom: calc(env(safe-area-inset-bottom, 0px) + 0.45rem);
+  }
+
+  .zoom-overlay button {
+    min-width: 98px;
+    font-size: 0.78rem;
   }
 }
