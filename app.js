@@ -5,6 +5,7 @@ const planetSelect = document.querySelector("#planet-search");
 const speedSlider = document.querySelector("#speed-slider");
 const speedValue = document.querySelector("#speed-value");
 const yearsValue = document.querySelector("#years-value");
+const atmosphereToggle = document.querySelector("#atmosphere-toggle");
 const zoomInBtn = document.querySelector("#zoom-in-btn");
 const zoomOutBtn = document.querySelector("#zoom-out-btn");
 const fullscreenBtn = document.querySelector("#fullscreen-btn");
@@ -170,6 +171,7 @@ const texturePathCandidates = {
 const simulation = {
   daysPerSecond: Number(speedSlider?.value || 40),
   elapsedDays: 0,
+  atmosphereEnabled: atmosphereToggle ? atmosphereToggle.checked : true,
 };
 
 function setHudCollapsed(collapsed) {
@@ -279,6 +281,7 @@ const planets = [
     orbitSpeed: 0.71,
     spinSpeed: 0.45,
     color: "#d8b482",
+    atmosphere: { color: "255, 215, 155", strength: 0.26, width: 0.26 },
     summary: "Hottest planet with a dense CO2 atmosphere and sulfuric acid clouds.",
     angle: Math.random() * TAU,
     orbitTilt: 0.03,
@@ -295,6 +298,7 @@ const planets = [
     orbitSpeed: 0.6,
     spinSpeed: 1.2,
     color: "#5ea8ff",
+    atmosphere: { color: "140, 195, 255", strength: 0.24, width: 0.24 },
     summary: "Our home world with liquid oceans and a life-supporting atmosphere.",
     angle: Math.random() * TAU,
     orbitTilt: 0.01,
@@ -311,6 +315,7 @@ const planets = [
     orbitSpeed: 0.49,
     spinSpeed: 1.05,
     color: "#cb6f3b",
+    atmosphere: { color: "214, 146, 110", strength: 0.1, width: 0.16 },
     summary: "The red planet, cold and dusty, with giant canyons and volcanoes.",
     angle: Math.random() * TAU,
     orbitTilt: 0.04,
@@ -361,6 +366,7 @@ const planets = [
     orbitSpeed: 0.14,
     spinSpeed: 1.4,
     color: "#95d7dc",
+    atmosphere: { color: "170, 232, 236", strength: 0.14, width: 0.2 },
     summary: "Ice giant with an extreme tilt, rotating almost on its side.",
     angle: Math.random() * TAU,
     orbitTilt: 0.018,
@@ -377,6 +383,7 @@ const planets = [
     orbitSpeed: 0.11,
     spinSpeed: 1.5,
     color: "#588df4",
+    atmosphere: { color: "120, 170, 255", strength: 0.16, width: 0.2 },
     summary: "Distant ice giant with fast winds and deep blue methane-rich skies.",
     angle: Math.random() * TAU,
     orbitTilt: 0.03,
@@ -500,6 +507,12 @@ speedSlider.addEventListener("input", () => {
   simulation.daysPerSecond = Number(speedSlider.value);
   updateSimulationLabels();
 });
+
+if (atmosphereToggle) {
+  atmosphereToggle.addEventListener("change", () => {
+    simulation.atmosphereEnabled = atmosphereToggle.checked;
+  });
+}
 
 if (zoomInBtn) {
   zoomInBtn.addEventListener("click", () => {
@@ -742,6 +755,46 @@ function drawSunCorona(screen, rPx) {
   ctx.beginPath();
   ctx.arc(screen.x, screen.y, rPx * 1.32, 0, TAU);
   ctx.fill();
+}
+
+function drawAtmosphereGlow(screen, rPx, lightCam, atmosphere) {
+  if (!atmosphere) return;
+
+  const sx = lightCam.x;
+  const sy = -lightCam.y;
+  const sl = Math.hypot(sx, sy) || 1;
+  const nx = sx / sl;
+  const ny = sy / sl;
+  const lightFacing = Math.max(0, lightCam.z);
+
+  const outerR = rPx * (1 + atmosphere.width);
+  const glowAlpha = clamp(atmosphere.strength * (0.7 + lightFacing * 0.5), 0.04, 0.42);
+
+  ctx.save();
+
+  // Broad atmospheric halo.
+  const halo = ctx.createRadialGradient(screen.x, screen.y, rPx * 0.96, screen.x, screen.y, outerR);
+  halo.addColorStop(0, "rgba(0,0,0,0)");
+  halo.addColorStop(0.45, "rgba(0,0,0,0)");
+  halo.addColorStop(1, `rgba(${atmosphere.color}, ${glowAlpha * 0.7})`);
+  ctx.fillStyle = halo;
+  ctx.beginPath();
+  ctx.arc(screen.x, screen.y, outerR, 0, TAU);
+  ctx.fill();
+
+  // Sun-facing limb boost.
+  const lx = screen.x + nx * rPx * 0.9;
+  const ly = screen.y + ny * rPx * 0.9;
+  const limb = ctx.createRadialGradient(lx, ly, rPx * 0.15, lx, ly, rPx * 1.05);
+  limb.addColorStop(0, `rgba(${atmosphere.color}, ${glowAlpha})`);
+  limb.addColorStop(1, "rgba(0,0,0,0)");
+  ctx.globalCompositeOperation = "lighter";
+  ctx.fillStyle = limb;
+  ctx.beginPath();
+  ctx.arc(screen.x, screen.y, outerR, 0, TAU);
+  ctx.fill();
+
+  ctx.restore();
 }
 
 function drawTexturedSphere(screen, rPx, texture, baseColor, spin = 0, phaseU = 0) {
@@ -1060,6 +1113,9 @@ function renderBodies(basis) {
     if (e.planet.name === "Venus") glossy = 0.04;
     if (e.planet.name === "Jupiter" || e.planet.name === "Saturn") glossy = 0.03;
     shadeSphereBySun(e.screen, rPx, lightCam, glossy);
+    if (simulation.atmosphereEnabled) {
+      drawAtmosphereGlow(e.screen, rPx, lightCam, e.planet.atmosphere);
+    }
   }
 }
 
