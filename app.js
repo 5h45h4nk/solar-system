@@ -11,6 +11,7 @@ const resetTimeBtn = document.querySelector("#reset-time-btn");
 const scaleModeSelect = document.querySelector("#scale-mode");
 const atmosphereToggle = document.querySelector("#atmosphere-toggle");
 const shadowsToggle = document.querySelector("#shadows-toggle");
+const lockLightingToggle = document.querySelector("#lock-lighting-toggle");
 const sunlightSlider = document.querySelector("#sunlight-slider");
 const ambientSlider = document.querySelector("#ambient-slider");
 const satellitesToggle = document.querySelector("#satellites-toggle");
@@ -70,6 +71,11 @@ function clamp(n, min, max) {
 
 function lerp(a, b, t) {
   return a + (b - a) * t;
+}
+
+function smoothstep(edge0, edge1, x) {
+  const t = clamp((x - edge0) / Math.max(1e-6, edge1 - edge0), 0, 1);
+  return t * t * (3 - 2 * t);
 }
 
 function easeInOutCubic(t) {
@@ -221,10 +227,11 @@ const texturePathCandidates = {
 };
 
 const simulation = {
-  daysPerSecond: Number(speedSlider?.value || 40),
+  daysPerSecond: Number(speedSlider?.value || 1),
   elapsedDays: 0,
   atmosphereEnabled: atmosphereToggle ? atmosphereToggle.checked : true,
   shadowsEnabled: shadowsToggle ? shadowsToggle.checked : true,
+  lockLightingEnabled: lockLightingToggle ? lockLightingToggle.checked : false,
   sunLightIntensity: Number(sunlightSlider?.value || 1.15),
   ambientLight: Number(ambientSlider?.value || 0.14),
   satellitesEnabled: satellitesToggle ? satellitesToggle.checked : true,
@@ -232,6 +239,8 @@ const simulation = {
   labelsEnabled: labelsToggle ? labelsToggle.checked : true,
   scaleMode: scaleModeSelect ? scaleModeSelect.value : "educational",
 };
+
+const lockedLightDirection = { x: 0.82, y: -0.35 };
 
 function setHudCollapsed(collapsed) {
   if (!hudEl || !hudToggleBtn) return;
@@ -860,6 +869,27 @@ if (shadowsToggle) {
   });
 }
 
+function captureLockedLightDirection() {
+  const basis = cameraBasis();
+  const sunVec = normalize(sub(sun.position, camera.position));
+  const lx = dot(sunVec, basis.right);
+  const ly = -dot(sunVec, basis.up);
+  const mag = Math.hypot(lx, ly);
+  if (mag > 1e-5) {
+    lockedLightDirection.x = lx / mag;
+    lockedLightDirection.y = ly / mag;
+  }
+}
+
+if (lockLightingToggle) {
+  lockLightingToggle.addEventListener("change", () => {
+    simulation.lockLightingEnabled = lockLightingToggle.checked;
+    if (simulation.lockLightingEnabled) {
+      captureLockedLightDirection();
+    }
+  });
+}
+
 if (sunlightSlider) {
   sunlightSlider.addEventListener("input", () => {
     simulation.sunLightIntensity = Number(sunlightSlider.value);
@@ -1375,10 +1405,8 @@ function drawAtmosphereGlow(screen, rPx, lightCam, atmosphere) {
   const sl = Math.hypot(sx, sy) || 1;
   const nx = sx / sl;
   const ny = sy / sl;
-  const lightFacing = Math.max(0, lightCam.z);
-
   const outerR = rPx * (1 + atmosphere.width);
-  const glowAlpha = clamp(atmosphere.strength * (0.7 + lightFacing * 0.5), 0.04, 0.42);
+  const glowAlpha = clamp(atmosphere.strength * 0.95, 0.04, 0.42);
 
   ctx.save();
 
@@ -1504,22 +1532,29 @@ function computeSunVisibilityAtPoint(targetPos, selfId, occluders) {
 
 function shadeSphereBySun(screen, rPx, lightCam, glossy = 0.25, sunVisibility = 1) {
   // Project light direction into screen space for plausible day/night transition.
-  const sx = lightCam.x;
-  const sy = -lightCam.y;
-  const sz = clamp(lightCam.z, -1, 1);
-  const sl = Math.hypot(sx, sy) || 1;
-  const nx = sx / sl;
-  const ny = sy / sl;
+  const sx = simulation.lockLightingEnabled ? lockedLightDirection.x : lightCam.x;
+  const sy = simulation.lockLightingEnabled ? lockedLightDirection.y : -lightCam.y;
+  const slRaw = Math.hypot(sx, sy);
+  const sl = Math.max(slRaw, 1e-6);
+  let nx = sx / sl;
+  let ny = sy / sl;
+  if (slRaw < 1e-4) {
+    // If sun direction is nearly axial in screen space, avoid random orientation flips.
+    nx = 0;
+    ny = -1;
+  }
   const vis = clamp(sunVisibility, 0, 1);
   const ambient = clamp(simulation.ambientLight, 0, 1);
   const direct = clamp(simulation.sunLightIntensity * vis, 0, 3);
+  const viewPhase = simulation.lockLightingEnabled ? 0 : clamp(-lightCam.z, -1, 1);
+  const backLit = Math.max(0, -viewPhase);
+  const axial = 1 - clamp(slRaw / 0.35, 0, 1);
+  const backBlend = smoothstep(0.05, 0.9, backLit) * smoothstep(0.12, 0.95, axial);
 
-  // Shift terminator by phase (lightCam.z). z=1 => near full phase, z=-1 => near new phase.
-  const phaseShift = sz * rPx * 0.7;
-  const litX = screen.x + nx * (rPx * 1.02 + phaseShift);
-  const litY = screen.y + ny * (rPx * 1.02 + phaseShift);
-  const darkX = screen.x - nx * (rPx * 1.18 - phaseShift);
-  const darkY = screen.y - ny * (rPx * 1.18 - phaseShift);
+  const litX = screen.x + nx * rPx * 1.05;
+  const litY = screen.y + ny * rPx * 1.05;
+  const darkX = screen.x - nx * rPx * 1.15;
+  const darkY = screen.y - ny * rPx * 1.15;
 
   const terminator = ctx.createLinearGradient(litX, litY, darkX, darkY);
   terminator.addColorStop(0, "rgba(255,255,255,0)");
@@ -1533,13 +1568,30 @@ function shadeSphereBySun(screen, rPx, lightCam, glossy = 0.25, sunVisibility = 
   ctx.arc(screen.x, screen.y, rPx, 0, TAU);
   ctx.fill();
 
+  if (backBlend > 0.001) {
+    // Continuous backlight darkening; avoids hard shader mode switches and ring artifacts.
+    ctx.fillStyle = `rgba(0,0,0,${clamp(0.16 + backBlend * 0.56, 0.16, 0.82)})`;
+    ctx.beginPath();
+    ctx.arc(screen.x, screen.y, rPx, 0, TAU);
+    ctx.fill();
+
+    const rimLight = ctx.createRadialGradient(screen.x, screen.y, rPx * 0.8, screen.x, screen.y, rPx * 1.02);
+    rimLight.addColorStop(0, "rgba(0,0,0,0)");
+    rimLight.addColorStop(1, `rgba(205, 192, 168, ${0.12 * backBlend})`);
+    ctx.fillStyle = rimLight;
+    ctx.beginPath();
+    ctx.arc(screen.x, screen.y, rPx, 0, TAU);
+    ctx.fill();
+  }
+
   // Diffuse rolloff from the sub-solar point so only sun-facing regions are brightest.
   const subSolarX = screen.x + nx * rPx * 0.38;
   const subSolarY = screen.y + ny * rPx * 0.38;
   const diffuse = ctx.createRadialGradient(subSolarX, subSolarY, rPx * 0.08, screen.x, screen.y, rPx * 1.08);
+  const diffuseScale = 1 - backBlend * 0.9;
   diffuse.addColorStop(0, "rgba(0,0,0,0)");
-  diffuse.addColorStop(0.52, `rgba(0,0,0,${clamp(0.12 + (1 - direct) * 0.2, 0.08, 0.45)})`);
-  diffuse.addColorStop(1, `rgba(0,0,0,${clamp(0.34 + (1 - ambient) * 0.24, 0.22, 0.7)})`);
+  diffuse.addColorStop(0.52, `rgba(0,0,0,${clamp((0.12 + (1 - direct) * 0.2) * diffuseScale, 0.02, 0.45)})`);
+  diffuse.addColorStop(1, `rgba(0,0,0,${clamp((0.34 + (1 - ambient) * 0.24) * diffuseScale, 0.08, 0.7)})`);
   ctx.fillStyle = diffuse;
   ctx.beginPath();
   ctx.arc(screen.x, screen.y, rPx, 0, TAU);
@@ -1550,8 +1602,9 @@ function shadeSphereBySun(screen, rPx, lightCam, glossy = 0.25, sunVisibility = 
   const nightMask = ctx.createLinearGradient(litX, litY, darkX, darkY);
   nightMask.addColorStop(0, "rgba(0,0,0,0)");
   nightMask.addColorStop(0.48, "rgba(0,0,0,0)");
-  nightMask.addColorStop(0.62, `rgba(0,0,0,${0.34 * nightStrength})`);
-  nightMask.addColorStop(1, `rgba(0,0,0,${0.9 * nightStrength})`);
+  const nightBoost = 1 + backBlend * 0.9;
+  nightMask.addColorStop(0.62, `rgba(0,0,0,${0.34 * nightStrength * nightBoost})`);
+  nightMask.addColorStop(1, `rgba(0,0,0,${0.9 * nightStrength * nightBoost})`);
   ctx.fillStyle = nightMask;
   ctx.beginPath();
   ctx.arc(screen.x, screen.y, rPx, 0, TAU);
@@ -1575,7 +1628,7 @@ function shadeSphereBySun(screen, rPx, lightCam, glossy = 0.25, sunVisibility = 
 
   // Keep reflections subtle; strong mirror-like highlights look fake for most planets.
   if (glossy > 0.001) {
-    const facing = Math.max(0, lightCam.z) * direct;
+    const facing = direct * clamp(slRaw * 4, 0, 1) * (1 - backBlend);
     const highlightR = rPx * (0.08 + glossy * 0.1);
     const hx = screen.x + nx * rPx * 0.34;
     const hy = screen.y + ny * rPx * 0.34;
