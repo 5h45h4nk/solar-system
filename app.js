@@ -5,6 +5,7 @@ const planetSelect = document.querySelector("#planet-search");
 const speedSlider = document.querySelector("#speed-slider");
 const speedValue = document.querySelector("#speed-value");
 const yearsValue = document.querySelector("#years-value");
+const fullscreenBtn = document.querySelector("#fullscreen-btn");
 const flyBtn = document.querySelector("#fly-btn");
 const overviewBtn = document.querySelector("#overview-btn");
 const infoEl = document.querySelector("#planet-info");
@@ -490,8 +491,29 @@ let lastY = 0;
 let pointerX = -1;
 let pointerY = -1;
 let pointerInside = false;
+const touchPoints = new Map();
+let pinchStartDistance = 0;
+let pinchStartRadius = 0;
+
+function distance2D(a, b) {
+  return Math.hypot(a.x - b.x, a.y - b.y);
+}
+
+function beginPinchIfNeeded() {
+  if (touchPoints.size !== 2) return;
+  const pts = Array.from(touchPoints.values());
+  pinchStartDistance = Math.max(1, distance2D(pts[0], pts[1]));
+  pinchStartRadius = camera.radius;
+}
 
 canvas.addEventListener("pointerdown", (e) => {
+  if (e.pointerType === "touch") {
+    touchPoints.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    beginPinchIfNeeded();
+    canvas.setPointerCapture(e.pointerId);
+    return;
+  }
+
   dragging = true;
   lastX = e.clientX;
   lastY = e.clientY;
@@ -499,6 +521,37 @@ canvas.addEventListener("pointerdown", (e) => {
 });
 
 canvas.addEventListener("pointermove", (e) => {
+  if (e.pointerType === "touch") {
+    e.preventDefault();
+    touchPoints.set(e.pointerId, { x: e.clientX, y: e.clientY });
+
+    if (touchPoints.size === 2) {
+      const pts = Array.from(touchPoints.values());
+      const dist = Math.max(1, distance2D(pts[0], pts[1]));
+      const ratio = pinchStartDistance / dist;
+      camera.radius = clamp(pinchStartRadius * ratio, 35, 1600);
+      return;
+    }
+
+    if (touchPoints.size === 1) {
+      const p = touchPoints.get(e.pointerId);
+      if (!p) return;
+      if (!dragging) {
+        dragging = true;
+        lastX = p.x;
+        lastY = p.y;
+        return;
+      }
+      const dx = p.x - lastX;
+      const dy = p.y - lastY;
+      lastX = p.x;
+      lastY = p.y;
+      camera.yaw -= dx * 0.005;
+      camera.pitch = clamp(camera.pitch - dy * 0.004, -1.3, 1.3);
+      return;
+    }
+  }
+
   const rect = canvas.getBoundingClientRect();
   pointerX = e.clientX - rect.left;
   pointerY = e.clientY - rect.top;
@@ -515,6 +568,19 @@ canvas.addEventListener("pointermove", (e) => {
 });
 
 canvas.addEventListener("pointerup", (e) => {
+  if (e.pointerType === "touch") {
+    touchPoints.delete(e.pointerId);
+    if (touchPoints.size !== 2) {
+      pinchStartDistance = 0;
+      pinchStartRadius = camera.radius;
+    }
+    dragging = false;
+    if (canvas.hasPointerCapture(e.pointerId)) {
+      canvas.releasePointerCapture(e.pointerId);
+    }
+    return;
+  }
+
   dragging = false;
   canvas.releasePointerCapture(e.pointerId);
 });
@@ -530,6 +596,33 @@ canvas.addEventListener("wheel", (e) => {
   const delta = Math.sign(e.deltaY);
   camera.radius = clamp(camera.radius * (1 + delta * 0.08), 35, 1600);
 }, { passive: false });
+
+if (fullscreenBtn) {
+  fullscreenBtn.addEventListener("click", async () => {
+    try {
+      if (!document.fullscreenElement) {
+        await document.documentElement.requestFullscreen();
+        if (screen.orientation && screen.orientation.lock) {
+          try {
+            await screen.orientation.lock("landscape");
+          } catch {
+            // Some browsers block orientation lock without user settings.
+          }
+        }
+        fullscreenBtn.textContent = "Exit Fullscreen";
+      } else {
+        await document.exitFullscreen();
+        fullscreenBtn.textContent = "Fullscreen Landscape";
+      }
+    } catch {
+      infoEl.textContent = "Fullscreen/orientation is not supported in this mobile browser.";
+    }
+  });
+
+  document.addEventListener("fullscreenchange", () => {
+    fullscreenBtn.textContent = document.fullscreenElement ? "Exit Fullscreen" : "Fullscreen Landscape";
+  });
+}
 
 function drawBackground() {
   const g = ctx.createLinearGradient(0, 0, 0, height);
