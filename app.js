@@ -30,6 +30,7 @@ const PHYSICAL_DISTANCE_SCALE = 120;
 const EARTH_VISUAL_RADIUS = 5.7;
 const EARTH_DIAMETER_KM = 12742;
 const SUN_DIAMETER_KM = 1392700;
+const EDUCATIONAL_BASE_DAYS_PER_SECOND = 40;
 
 const camera = {
   target: { x: 0, y: 0, z: 0 },
@@ -1150,7 +1151,8 @@ function updatePlanetPositions(dt) {
     if (simulation.scaleMode === "physical") {
       p.spin += (TAU * simDaysDelta) / p.spinPeriodDays;
     } else {
-      p.spin += p.educationalSpinSpeed * dt;
+      const educationalTimeScale = simulation.daysPerSecond / EDUCATIONAL_BASE_DAYS_PER_SECOND;
+      p.spin += p.educationalSpinSpeed * dt * educationalTimeScale;
     }
     p.position.x = Math.cos(p.angle) * p.distance;
     p.position.z = Math.sin(p.angle) * p.distance;
@@ -1159,7 +1161,8 @@ function updatePlanetPositions(dt) {
   if (simulation.scaleMode === "physical") {
     sun.spin += (TAU * simDaysDelta) / 25.05;
   } else {
-    sun.spin += 0.16 * dt;
+    const educationalTimeScale = simulation.daysPerSecond / EDUCATIONAL_BASE_DAYS_PER_SECOND;
+    sun.spin += 0.16 * dt * educationalTimeScale;
   }
 }
 
