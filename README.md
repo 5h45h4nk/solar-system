@@ -30,15 +30,15 @@ Place textures in:
 
 Use these exact filenames:
 
-- `sun.jpg`
-- `mercury.jpg`
-- `venus.jpg`
-- `earth.jpg`
-- `mars.jpg`
-- `jupiter.jpg`
-- `saturn.jpg`
-- `uranus.jpg`
-- `neptune.jpg`
+- `Sun.jpg`
+- `Mercury.jpg`
+- `Venus.jpg`
+- `Earth.jpg`
+- `Mars.jpg`
+- `Jupiter.jpg`
+- `Saturn.jpg`
+- `Uranus.jpg`
+- `Neptune.jpg`
 
 Recommended maps are equirectangular (`2:1`) at `1024x512` or higher.
 
@@ -51,3 +51,11 @@ npm run pages:url
 ```
 
 If Pages is still provisioning, wait for the GitHub Actions deployment to finish and run it again.
+
+## Texture Attribution
+
+Planet and Sun texture assets were sourced from:
+
+- Solar System Scope Textures: https://www.solarsystemscope.com/textures/
+
+See `ATTRIBUTION.md` for details and publication notes.

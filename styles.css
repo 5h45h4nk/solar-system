@@ -103,6 +103,20 @@ button:hover {
   min-height: 2.5rem;
 }
 
+.credits {
+  margin-top: 0.65rem;
+  font-size: 0.73rem;
+  opacity: 0.82;
+}
+
+.credits a {
+  color: #9fd2ff;
+}
+
+.credits a:hover {
+  color: #c2e4ff;
+}
+
 .sim-stats {
   display: flex;
   justify-content: space-between;
