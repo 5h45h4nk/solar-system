@@ -151,15 +151,15 @@ const stars = Array.from({ length: 2200 }, () => {
 });
 
 const texturePaths = {
-  Sun: "./assets/textures/sun.jpg",
-  Mercury: "./assets/textures/mercury.jpg",
-  Venus: "./assets/textures/venus.jpg",
-  Earth: "./assets/textures/earth.jpg",
-  Mars: "./assets/textures/mars.jpg",
-  Jupiter: "./assets/textures/jupiter.jpg",
-  Saturn: "./assets/textures/saturn.jpg",
-  Uranus: "./assets/textures/uranus.jpg",
-  Neptune: "./assets/textures/neptune.jpg",
+  Sun: "./assets/textures/Sun.jpg",
+  Mercury: "./assets/textures/Mercury.jpg",
+  Venus: "./assets/textures/Venus.jpg",
+  Earth: "./assets/textures/Earth.jpg",
+  Mars: "./assets/textures/Mars.jpg",
+  Jupiter: "./assets/textures/Jupiter.jpg",
+  Saturn: "./assets/textures/Saturn.jpg",
+  Uranus: "./assets/textures/Uranus.jpg",
+  Neptune: "./assets/textures/Neptune.jpg",
 };
 
 const simulation = {
