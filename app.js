@@ -271,6 +271,7 @@ const planets = [
     yearLength: "88 days",
     distanceAU: 0.39,
     orbitalPeriodDays: 88,
+    spinPeriodHours: 1407.6,
     radius: 3.2,
     distance: 50,
     orbitSpeed: 0.94,
@@ -288,6 +289,7 @@ const planets = [
     yearLength: "225 days",
     distanceAU: 0.72,
     orbitalPeriodDays: 225,
+    spinPeriodHours: -5832.5,
     radius: 5.2,
     distance: 72,
     orbitSpeed: 0.71,
@@ -306,6 +308,7 @@ const planets = [
     yearLength: "365 days",
     distanceAU: 1,
     orbitalPeriodDays: 365.25,
+    spinPeriodHours: 23.93,
     radius: 5.7,
     distance: 96,
     orbitSpeed: 0.6,
@@ -324,6 +327,7 @@ const planets = [
     yearLength: "687 days",
     distanceAU: 1.52,
     orbitalPeriodDays: 687,
+    spinPeriodHours: 24.62,
     radius: 4.4,
     distance: 122,
     orbitSpeed: 0.49,
@@ -342,6 +346,7 @@ const planets = [
     yearLength: "4333 days",
     distanceAU: 5.2,
     orbitalPeriodDays: 4333,
+    spinPeriodHours: 9.93,
     radius: 14.5,
     distance: 178,
     orbitSpeed: 0.26,
@@ -359,6 +364,7 @@ const planets = [
     yearLength: "10759 days",
     distanceAU: 9.58,
     orbitalPeriodDays: 10759,
+    spinPeriodHours: 10.7,
     radius: 12.1,
     distance: 240,
     orbitSpeed: 0.2,
@@ -378,6 +384,7 @@ const planets = [
     yearLength: "30687 days",
     distanceAU: 19.2,
     orbitalPeriodDays: 30687,
+    spinPeriodHours: -17.2,
     radius: 9,
     distance: 300,
     orbitSpeed: 0.14,
@@ -396,6 +403,7 @@ const planets = [
     yearLength: "60190 days",
     distanceAU: 30.05,
     orbitalPeriodDays: 60190,
+    spinPeriodHours: 16.11,
     radius: 8.8,
     distance: 356,
     orbitSpeed: 0.11,
@@ -428,8 +436,10 @@ for (const p of planets) {
 for (const p of planets) {
   p.educationalRadius = p.radius;
   p.educationalDistance = p.distance;
+  p.educationalSpinSpeed = p.spinSpeed;
   p.physicalRadius = EARTH_VISUAL_RADIUS * (p.diameterKm / EARTH_DIAMETER_KM);
   p.physicalDistance = p.distanceAU * PHYSICAL_DISTANCE_SCALE;
+  p.spinPeriodDays = (p.spinPeriodHours || 24) / 24;
 }
 
 function applyScaleMode(mode) {
@@ -1137,12 +1147,20 @@ function updatePlanetPositions(dt) {
 
   for (const p of planets) {
     p.angle += (TAU * simDaysDelta) / p.orbitalPeriodDays;
-    p.spin += p.spinSpeed * dt;
+    if (simulation.scaleMode === "physical") {
+      p.spin += (TAU * simDaysDelta) / p.spinPeriodDays;
+    } else {
+      p.spin += p.educationalSpinSpeed * dt;
+    }
     p.position.x = Math.cos(p.angle) * p.distance;
     p.position.z = Math.sin(p.angle) * p.distance;
     p.position.y = p.position.z * p.orbitTilt;
   }
-  sun.spin += 0.16 * dt;
+  if (simulation.scaleMode === "physical") {
+    sun.spin += (TAU * simDaysDelta) / 25.05;
+  } else {
+    sun.spin += 0.16 * dt;
+  }
 }
 
 function renderBodies(basis) {
