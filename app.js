@@ -117,6 +117,40 @@ function rotateY(v, a) {
   return vec(v.x * c + v.z * s, v.y, -v.x * s + v.z * c);
 }
 
+function solveEccentricAnomaly(meanAnomaly, e) {
+  // Newton-Raphson solve of M = E - e*sin(E), robust for planetary eccentricities.
+  let E = e < 0.8 ? meanAnomaly : Math.PI;
+  for (let i = 0; i < 7; i += 1) {
+    const f = E - e * Math.sin(E) - meanAnomaly;
+    const fp = 1 - e * Math.cos(E);
+    E -= f / Math.max(1e-6, fp);
+  }
+  return E;
+}
+
+function getPlanetPhysicalPosition(planet, meanAnomaly) {
+  const e = planet.eccentricity || 0;
+  const E = solveEccentricAnomaly(meanAnomaly, e);
+  const a = planet.distance;
+  const b = a * Math.sqrt(Math.max(0, 1 - e * e));
+
+  // Ellipse in orbital plane, focus at the Sun.
+  let x = a * (Math.cos(E) - e);
+  let z = b * Math.sin(E);
+
+  const w = planet.periapsisRad || 0;
+  const cw = Math.cos(w);
+  const sw = Math.sin(w);
+  const xr = x * cw - z * sw;
+  const zr = x * sw + z * cw;
+
+  const inc = planet.inclinationRad || 0;
+  const ci = Math.cos(inc);
+  const si = Math.sin(inc);
+
+  return vec(xr, zr * si, zr * ci);
+}
+
 function updateCameraPosition() {
   const cp = Math.cos(camera.pitch);
   camera.position.x = camera.target.x + camera.radius * Math.sin(camera.yaw) * cp;
@@ -278,6 +312,9 @@ const planets = [
     dayLength: "1408 h",
     yearLength: "88 days",
     distanceAU: 0.39,
+    eccentricity: 0.2056,
+    inclinationDeg: 7.0,
+    periapsisDeg: 29,
     orbitalPeriodDays: 88,
     spinPeriodHours: 1407.6,
     radius: 3.2,
@@ -296,6 +333,9 @@ const planets = [
     dayLength: "5832 h",
     yearLength: "225 days",
     distanceAU: 0.72,
+    eccentricity: 0.0068,
+    inclinationDeg: 3.39,
+    periapsisDeg: 54,
     orbitalPeriodDays: 225,
     spinPeriodHours: -5832.5,
     radius: 5.2,
@@ -315,6 +355,9 @@ const planets = [
     dayLength: "24 h",
     yearLength: "365 days",
     distanceAU: 1,
+    eccentricity: 0.0167,
+    inclinationDeg: 0.0,
+    periapsisDeg: 102,
     orbitalPeriodDays: 365.25,
     spinPeriodHours: 23.93,
     radius: 5.7,
@@ -334,6 +377,9 @@ const planets = [
     dayLength: "24.6 h",
     yearLength: "687 days",
     distanceAU: 1.52,
+    eccentricity: 0.0934,
+    inclinationDeg: 1.85,
+    periapsisDeg: 286,
     orbitalPeriodDays: 687,
     spinPeriodHours: 24.62,
     radius: 4.4,
@@ -353,6 +399,9 @@ const planets = [
     dayLength: "9.9 h",
     yearLength: "4333 days",
     distanceAU: 5.2,
+    eccentricity: 0.0489,
+    inclinationDeg: 1.3,
+    periapsisDeg: 275,
     orbitalPeriodDays: 4333,
     spinPeriodHours: 9.93,
     radius: 14.5,
@@ -371,6 +420,9 @@ const planets = [
     dayLength: "10.7 h",
     yearLength: "10759 days",
     distanceAU: 9.58,
+    eccentricity: 0.0565,
+    inclinationDeg: 2.49,
+    periapsisDeg: 336,
     orbitalPeriodDays: 10759,
     spinPeriodHours: 10.7,
     radius: 12.1,
@@ -391,6 +443,9 @@ const planets = [
     dayLength: "17.2 h",
     yearLength: "30687 days",
     distanceAU: 19.2,
+    eccentricity: 0.046,
+    inclinationDeg: 0.77,
+    periapsisDeg: 96,
     orbitalPeriodDays: 30687,
     spinPeriodHours: -17.2,
     radius: 9,
@@ -410,6 +465,9 @@ const planets = [
     dayLength: "16.1 h",
     yearLength: "60190 days",
     distanceAU: 30.05,
+    eccentricity: 0.009,
+    inclinationDeg: 1.77,
+    periapsisDeg: 273,
     orbitalPeriodDays: 60190,
     spinPeriodHours: 16.11,
     radius: 8.8,
@@ -484,6 +542,8 @@ for (const p of planets) {
   p.physicalRadius = ((p.diameterKm * 0.5) / AU_KM) * PHYSICAL_DISTANCE_SCALE;
   p.physicalDistance = p.distanceAU * PHYSICAL_DISTANCE_SCALE;
   p.spinPeriodDays = (p.spinPeriodHours || 24) / 24;
+  p.inclinationRad = ((p.inclinationDeg || 0) * Math.PI) / 180;
+  p.periapsisRad = ((p.periapsisDeg || 0) * Math.PI) / 180;
   p.moons = (majorMoonDefs[p.name] || []).map((m, idx) => ({
     ...m,
     angle: Math.random() * TAU,
@@ -988,14 +1048,22 @@ function drawStars(basis, tSec) {
   }
 }
 
-function drawOrbit(distance, tilt, basis) {
+function drawOrbit(planet, basis) {
+  const distance = planet.distance;
+  const tilt = planet.orbitTilt;
   const steps = 420;
   const projected = new Array(steps);
 
   for (let i = 0; i < steps; i += 1) {
-    const t = (i / steps) * TAU;
-    const z = Math.sin(t) * distance;
-    const w = vec(Math.cos(t) * distance, z * tilt, z);
+    let w;
+    if (simulation.scaleMode === "physical") {
+      const meanAnomaly = (i / steps) * TAU;
+      w = getPlanetPhysicalPosition(planet, meanAnomaly);
+    } else {
+      const t = (i / steps) * TAU;
+      const z = Math.sin(t) * distance;
+      w = vec(Math.cos(t) * distance, z * tilt, z);
+    }
     projected[i] = project(w, basis);
   }
 
@@ -1413,9 +1481,16 @@ function updatePlanetPositions(dt) {
       const educationalTimeScale = simulation.daysPerSecond / EDUCATIONAL_BASE_DAYS_PER_SECOND;
       p.spin += p.educationalSpinSpeed * dt * educationalTimeScale;
     }
-    p.position.x = Math.cos(p.angle) * p.distance;
-    p.position.z = Math.sin(p.angle) * p.distance;
-    p.position.y = p.position.z * p.orbitTilt;
+    if (simulation.scaleMode === "physical") {
+      const pos = getPlanetPhysicalPosition(p, p.angle);
+      p.position.x = pos.x;
+      p.position.y = pos.y;
+      p.position.z = pos.z;
+    } else {
+      p.position.x = Math.cos(p.angle) * p.distance;
+      p.position.z = Math.sin(p.angle) * p.distance;
+      p.position.y = p.position.z * p.orbitTilt;
+    }
 
     if (simulation.satellitesEnabled && p.moons && p.moons.length > 0) {
       for (const m of p.moons) {
@@ -1613,7 +1688,7 @@ function tick(timestamp) {
   drawStars(basis, timestamp * 0.001);
 
   for (const p of planets) {
-    drawOrbit(p.distance, p.orbitTilt, basis);
+    drawOrbit(p, basis);
   }
   if (simulation.satellitesEnabled) {
     for (const p of planets) {
