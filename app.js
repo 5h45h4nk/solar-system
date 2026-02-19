@@ -5,6 +5,8 @@ const planetSelect = document.querySelector("#planet-search");
 const speedSlider = document.querySelector("#speed-slider");
 const speedValue = document.querySelector("#speed-value");
 const yearsValue = document.querySelector("#years-value");
+const zoomInBtn = document.querySelector("#zoom-in-btn");
+const zoomOutBtn = document.querySelector("#zoom-out-btn");
 const fullscreenBtn = document.querySelector("#fullscreen-btn");
 const flyBtn = document.querySelector("#fly-btn");
 const overviewBtn = document.querySelector("#overview-btn");
@@ -174,6 +176,19 @@ function setHudCollapsed(collapsed) {
   if (!hudEl || !hudToggleBtn) return;
   hudEl.classList.toggle("collapsed", collapsed);
   hudToggleBtn.textContent = collapsed ? "Show Controls" : "Hide Controls";
+  updateZoomOverlayOffset();
+}
+
+function updateZoomOverlayOffset() {
+  if (!hudEl) return;
+  if (!window.matchMedia("(max-width: 720px)").matches) {
+    document.documentElement.style.setProperty("--zoom-overlay-offset", "0px");
+    return;
+  }
+
+  const expanded = !hudEl.classList.contains("collapsed");
+  const offset = expanded ? hudEl.offsetHeight + 8 : 0;
+  document.documentElement.style.setProperty("--zoom-overlay-offset", `${offset}px`);
 }
 
 if (window.matchMedia("(max-width: 720px)").matches) {
@@ -185,6 +200,8 @@ if (hudToggleBtn) {
     setHudCollapsed(!hudEl.classList.contains("collapsed"));
   });
 }
+
+window.addEventListener("resize", updateZoomOverlayOffset);
 
 function loadImage(src, onSuccess) {
   const img = new Image();
@@ -484,6 +501,18 @@ speedSlider.addEventListener("input", () => {
   simulation.daysPerSecond = Number(speedSlider.value);
   updateSimulationLabels();
 });
+
+if (zoomInBtn) {
+  zoomInBtn.addEventListener("click", () => {
+    camera.radius = clamp(camera.radius * 0.86, 35, 1600);
+  });
+}
+
+if (zoomOutBtn) {
+  zoomOutBtn.addEventListener("click", () => {
+    camera.radius = clamp(camera.radius * 1.16, 35, 1600);
+  });
+}
 
 let dragging = false;
 let lastX = 0;
@@ -1015,4 +1044,6 @@ window.addEventListener("resize", resize);
 refreshInfoPanel();
 updateSimulationLabels();
 updateCameraPosition();
+updateZoomOverlayOffset();
+setTimeout(updateZoomOverlayOffset, 250);
 requestAnimationFrame(tick);

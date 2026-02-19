@@ -154,7 +154,7 @@ button:hover {
 .zoom-overlay {
   position: fixed;
   left: 50%;
-  bottom: calc(env(safe-area-inset-bottom, 0px) + 0.6rem);
+  bottom: calc(env(safe-area-inset-bottom, 0px) + var(--zoom-overlay-offset, 0px) + 0.6rem);
   transform: translateX(-50%);
   z-index: 12;
   background: rgba(5, 12, 26, 0.38);
@@ -199,7 +199,7 @@ button:hover {
   }
 
   .zoom-overlay {
-    bottom: calc(env(safe-area-inset-bottom, 0px) + 0.45rem);
+    bottom: calc(env(safe-area-inset-bottom, 0px) + var(--zoom-overlay-offset, 0px) + 0.45rem);
   }
 
   .zoom-overlay button {
