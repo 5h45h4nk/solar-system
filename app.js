@@ -150,16 +150,16 @@ const stars = Array.from({ length: 2200 }, () => {
   };
 });
 
-const texturePaths = {
-  Sun: "./assets/textures/Sun.jpg",
-  Mercury: "./assets/textures/Mercury.jpg",
-  Venus: "./assets/textures/Venus.jpg",
-  Earth: "./assets/textures/Earth.jpg",
-  Mars: "./assets/textures/Mars.jpg",
-  Jupiter: "./assets/textures/Jupiter.jpg",
-  Saturn: "./assets/textures/Saturn.jpg",
-  Uranus: "./assets/textures/Uranus.jpg",
-  Neptune: "./assets/textures/Neptune.jpg",
+const texturePathCandidates = {
+  Sun: ["./assets/textures/Sun.jpg", "./assets/textures/sun.jpg", "./assets/textures/Sun.png", "./assets/textures/sun.png"],
+  Mercury: ["./assets/textures/Mercury.jpg", "./assets/textures/mercury.jpg", "./assets/textures/Mercury.png", "./assets/textures/mercury.png"],
+  Venus: ["./assets/textures/Venus.jpg", "./assets/textures/venus.jpg", "./assets/textures/Venus.png", "./assets/textures/venus.png"],
+  Earth: ["./assets/textures/Earth.jpg", "./assets/textures/earth.jpg", "./assets/textures/Earth.png", "./assets/textures/earth.png"],
+  Mars: ["./assets/textures/Mars.jpg", "./assets/textures/mars.jpg", "./assets/textures/Mars.png", "./assets/textures/mars.png"],
+  Jupiter: ["./assets/textures/Jupiter.jpg", "./assets/textures/jupiter.jpg", "./assets/textures/Jupiter.png", "./assets/textures/jupiter.png"],
+  Saturn: ["./assets/textures/Saturn.jpg", "./assets/textures/saturn.jpg", "./assets/textures/Saturn.png", "./assets/textures/saturn.png"],
+  Uranus: ["./assets/textures/Uranus.jpg", "./assets/textures/uranus.jpg", "./assets/textures/Uranus.png", "./assets/textures/uranus.png"],
+  Neptune: ["./assets/textures/Neptune.jpg", "./assets/textures/neptune.jpg", "./assets/textures/Neptune.png", "./assets/textures/neptune.png"],
 };
 
 const simulation = {
@@ -173,6 +173,25 @@ function loadImage(src, onSuccess) {
   img.onload = () => onSuccess(img);
   img.onerror = () => {};
   img.src = src;
+}
+
+function loadFirstImage(paths, onSuccess) {
+  const list = Array.isArray(paths) ? paths : [paths];
+  let idx = 0;
+
+  function tryNext() {
+    if (idx >= list.length) return;
+    const src = list[idx];
+    idx += 1;
+
+    const img = new Image();
+    img.decoding = "async";
+    img.onload = () => onSuccess(img);
+    img.onerror = tryNext;
+    img.src = src;
+  }
+
+  tryNext();
 }
 
 function createDetailNoiseCanvas() {
@@ -338,9 +357,9 @@ for (const p of planets) {
   p.position = vec();
   p.spin = Math.random() * TAU;
 
-  const path = texturePaths[p.name];
-  if (path) {
-    loadImage(path, (img) => {
+  const paths = texturePathCandidates[p.name];
+  if (paths) {
+    loadFirstImage(paths, (img) => {
       p.texture = img;
     });
   }
@@ -352,7 +371,7 @@ const sun = {
   spin: 0,
 };
 
-loadImage(texturePaths.Sun, (img) => {
+loadFirstImage(texturePathCandidates.Sun, (img) => {
   sun.texture = img;
 });
 
