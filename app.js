@@ -10,6 +10,9 @@ const timePresetSelect = document.querySelector("#time-preset");
 const resetTimeBtn = document.querySelector("#reset-time-btn");
 const scaleModeSelect = document.querySelector("#scale-mode");
 const atmosphereToggle = document.querySelector("#atmosphere-toggle");
+const shadowsToggle = document.querySelector("#shadows-toggle");
+const sunlightSlider = document.querySelector("#sunlight-slider");
+const ambientSlider = document.querySelector("#ambient-slider");
 const satellitesToggle = document.querySelector("#satellites-toggle");
 const planetCamToggle = document.querySelector("#planet-cam-toggle");
 const labelsToggle = document.querySelector("#labels-toggle");
@@ -221,6 +224,9 @@ const simulation = {
   daysPerSecond: Number(speedSlider?.value || 40),
   elapsedDays: 0,
   atmosphereEnabled: atmosphereToggle ? atmosphereToggle.checked : true,
+  shadowsEnabled: shadowsToggle ? shadowsToggle.checked : true,
+  sunLightIntensity: Number(sunlightSlider?.value || 1.15),
+  ambientLight: Number(ambientSlider?.value || 0.14),
   satellitesEnabled: satellitesToggle ? satellitesToggle.checked : true,
   planetCameraEnabled: planetCamToggle ? planetCamToggle.checked : false,
   labelsEnabled: labelsToggle ? labelsToggle.checked : true,
@@ -848,6 +854,24 @@ if (atmosphereToggle) {
   });
 }
 
+if (shadowsToggle) {
+  shadowsToggle.addEventListener("change", () => {
+    simulation.shadowsEnabled = shadowsToggle.checked;
+  });
+}
+
+if (sunlightSlider) {
+  sunlightSlider.addEventListener("input", () => {
+    simulation.sunLightIntensity = Number(sunlightSlider.value);
+  });
+}
+
+if (ambientSlider) {
+  ambientSlider.addEventListener("input", () => {
+    simulation.ambientLight = Number(ambientSlider.value);
+  });
+}
+
 if (satellitesToggle) {
   satellitesToggle.addEventListener("change", () => {
     simulation.satellitesEnabled = satellitesToggle.checked;
@@ -1443,13 +1467,53 @@ function drawTexturedSphere(screen, rPx, texture, baseColor, spin = 0, phaseU = 
   ctx.fill();
 }
 
-function shadeSphereBySun(screen, rPx, lightCam, glossy = 0.25) {
+function computeSunVisibilityAtPoint(targetPos, selfId, occluders) {
+  if (!simulation.shadowsEnabled || !occluders || occluders.length === 0) return 1;
+
+  const toSun = sub(sun.position, targetPos);
+  const sunDist = Math.max(1e-6, length(toSun));
+  const toSunDir = scale(toSun, 1 / sunDist);
+  const sunAng = Math.asin(clamp(sun.radius / sunDist, 0, 1));
+  let visibility = 1;
+
+  for (const occ of occluders) {
+    if (occ.id === selfId) continue;
+
+    const toOcc = sub(occ.position, targetPos);
+    const occDist = length(toOcc);
+    if (occDist <= 1e-6 || occDist >= sunDist) continue;
+
+    const occDir = scale(toOcc, 1 / occDist);
+    if (dot(occDir, toSunDir) <= 0) continue;
+
+    const occAng = Math.asin(clamp(occ.radius / occDist, 0, 1));
+    const sep = Math.acos(clamp(dot(occDir, toSunDir), -1, 1));
+    const fullUmbra = occAng - sunAng;
+    const penumbra = occAng + sunAng;
+    if (sep >= penumbra) continue;
+
+    if (sep <= fullUmbra) {
+      visibility *= 0.06;
+      continue;
+    }
+
+    const overlap = clamp((penumbra - sep) / Math.max(1e-6, penumbra - fullUmbra), 0, 1);
+    visibility *= 1 - overlap * 0.86;
+  }
+
+  return clamp(visibility, 0, 1);
+}
+
+function shadeSphereBySun(screen, rPx, lightCam, glossy = 0.25, sunVisibility = 1) {
   // Project light direction into screen space for plausible day/night transition.
   const sx = lightCam.x;
   const sy = -lightCam.y;
   const sl = Math.hypot(sx, sy) || 1;
   const nx = sx / sl;
   const ny = sy / sl;
+  const vis = clamp(sunVisibility, 0, 1);
+  const ambient = clamp(simulation.ambientLight, 0, 1);
+  const direct = clamp(simulation.sunLightIntensity * vis, 0, 3);
 
   const litX = screen.x + nx * rPx * 1.05;
   const litY = screen.y + ny * rPx * 1.05;
@@ -1458,9 +1522,9 @@ function shadeSphereBySun(screen, rPx, lightCam, glossy = 0.25) {
 
   const terminator = ctx.createLinearGradient(litX, litY, darkX, darkY);
   terminator.addColorStop(0, "rgba(255,255,255,0)");
-  terminator.addColorStop(0.48, "rgba(10,16,28,0.08)");
-  terminator.addColorStop(0.78, "rgba(6,10,20,0.42)");
-  terminator.addColorStop(1, "rgba(3,7,14,0.76)");
+  terminator.addColorStop(0.44, `rgba(10,16,28,${clamp(0.04 + (1 - ambient) * 0.06, 0.04, 0.2)})`);
+  terminator.addColorStop(0.76, `rgba(6,10,20,${clamp(0.36 + (1 - direct) * 0.18, 0.25, 0.75)})`);
+  terminator.addColorStop(1, `rgba(3,7,14,${clamp(0.62 + (1 - direct) * 0.26, 0.45, 0.92)})`);
 
   ctx.fillStyle = terminator;
   ctx.beginPath();
@@ -1476,9 +1540,16 @@ function shadeSphereBySun(screen, rPx, lightCam, glossy = 0.25) {
   ctx.arc(screen.x, screen.y, rPx, 0, TAU);
   ctx.fill();
 
+  if (vis < 0.999) {
+    ctx.fillStyle = `rgba(0,0,0,${(1 - vis) * 0.72})`;
+    ctx.beginPath();
+    ctx.arc(screen.x, screen.y, rPx, 0, TAU);
+    ctx.fill();
+  }
+
   // Keep reflections subtle; strong mirror-like highlights look fake for most planets.
   if (glossy > 0.001) {
-    const facing = Math.max(0, lightCam.z);
+    const facing = Math.max(0, lightCam.z) * direct;
     const highlightR = rPx * (0.08 + glossy * 0.1);
     const hx = screen.x + nx * rPx * 0.34;
     const hy = screen.y + ny * rPx * 0.34;
@@ -1675,11 +1746,13 @@ function renderBodies(basis) {
   const entries = [];
   projectedPlanets.length = 0;
   projectedLabels.length = 0;
+  const shadowOccluders = [];
 
   for (const p of planets) {
     const screen = project(p.position, basis);
     if (!screen) continue;
     entries.push({ type: "planet", planet: p, screen, depth: screen.zCam });
+    shadowOccluders.push({ id: `planet:${p.name}`, position: p.position, radius: p.radius });
   }
 
   const sunScreen = project(sun.position, basis);
@@ -1701,6 +1774,7 @@ function renderBodies(basis) {
         const ms = project(m.position, basis);
         if (!ms) continue;
         entries.push({ type: "satellite", planet: p, moon: m, screen: ms, depth: ms.zCam });
+        shadowOccluders.push({ id: `moon:${p.name}:${m.name}`, position: m.position, radius: m.radius });
         projectedLabels.push({
           name: m.name,
           x: ms.x,
@@ -1730,6 +1804,18 @@ function renderBodies(basis) {
       const minMoonPx = simulation.scaleMode === "physical" ? 0.12 : 0.7;
       const mrPx = clamp(e.moon.radius * e.screen.scalePx, minMoonPx, 10);
       drawSphere(e.screen, mrPx, e.moon.color || "#c4ccd9", false);
+      const moonLightWorld = normalize(sub(sun.position, e.moon.position));
+      const moonLightCam = {
+        x: dot(moonLightWorld, basis.right),
+        y: dot(moonLightWorld, basis.up),
+        z: dot(moonLightWorld, basis.forward),
+      };
+      const moonSunVis = computeSunVisibilityAtPoint(
+        e.moon.position,
+        `moon:${e.planet.name}:${e.moon.name}`,
+        shadowOccluders,
+      );
+      shadeSphereBySun(e.screen, mrPx, moonLightCam, 0.01, moonSunVis);
       continue;
     }
 
@@ -1773,7 +1859,8 @@ function renderBodies(basis) {
     if (e.planet.name === "Earth") glossy = 0.08;
     if (e.planet.name === "Venus") glossy = 0.04;
     if (e.planet.name === "Jupiter" || e.planet.name === "Saturn") glossy = 0.03;
-    shadeSphereBySun(e.screen, rPx, lightCam, glossy);
+    const planetSunVis = computeSunVisibilityAtPoint(e.planet.position, `planet:${e.planet.name}`, shadowOccluders);
+    shadeSphereBySun(e.screen, rPx, lightCam, glossy, planetSunVis);
     if (simulation.atmosphereEnabled) {
       drawAtmosphereGlow(e.screen, rPx, lightCam, e.planet.atmosphere);
     }
