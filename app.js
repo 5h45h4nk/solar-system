@@ -10,6 +10,8 @@ const resetTimeBtn = document.querySelector("#reset-time-btn");
 const scaleModeSelect = document.querySelector("#scale-mode");
 const atmosphereToggle = document.querySelector("#atmosphere-toggle");
 const satellitesToggle = document.querySelector("#satellites-toggle");
+const planetCamToggle = document.querySelector("#planet-cam-toggle");
+const labelsToggle = document.querySelector("#labels-toggle");
 const zoomInBtn = document.querySelector("#zoom-in-btn");
 const zoomOutBtn = document.querySelector("#zoom-out-btn");
 const fullscreenBtn = document.querySelector("#fullscreen-btn");
@@ -185,6 +187,8 @@ const simulation = {
   elapsedDays: 0,
   atmosphereEnabled: atmosphereToggle ? atmosphereToggle.checked : true,
   satellitesEnabled: satellitesToggle ? satellitesToggle.checked : true,
+  planetCameraEnabled: planetCamToggle ? planetCamToggle.checked : false,
+  labelsEnabled: labelsToggle ? labelsToggle.checked : true,
   scaleMode: scaleModeSelect ? scaleModeSelect.value : "educational",
 };
 
@@ -561,6 +565,7 @@ loadFirstImage(texturePathCandidates.Sun, (img) => {
 let selectedPlanet = null;
 let hoveredPlanet = null;
 const projectedPlanets = [];
+const projectedLabels = [];
 let flyTransition = null;
 
 function updatePlanetInfo(planet, mode = "focus") {
@@ -628,7 +633,35 @@ function flyToPlanet(planet) {
   } else {
     dist = clamp(planet.radius * 14 + 40, 16, 650);
   }
-  startFly(planet.position, dist, camera.yaw + 0.8, 0.22, 1900);
+
+  // Cinematic fly-by: camera goes "behind" the planet relative to the Sun,
+  // while keeping planet center as the look target.
+  const targetPos = vec(planet.position.x, planet.position.y, planet.position.z);
+  const awayFromSun = normalize(sub(targetPos, sun.position));
+  const worldUp = vec(0, 1, 0);
+  let side = normalize(cross(awayFromSun, worldUp));
+  if (length(side) < 1e-5) {
+    side = vec(1, 0, 0);
+  }
+  const upNudge = normalize(cross(side, awayFromSun));
+  const cameraPos = add(
+    add(targetPos, scale(awayFromSun, dist)),
+    add(scale(side, dist * 0.28), scale(upNudge, dist * 0.1))
+  );
+
+  const currentTarget = vec(camera.target.x, camera.target.y, camera.target.z);
+  flyTransition = {
+    start: performance.now(),
+    duration: 1900,
+    fromTarget: currentTarget,
+    toTarget: targetPos,
+    fromRadius: camera.radius,
+    toRadius: length(sub(cameraPos, targetPos)),
+    fromYaw: camera.yaw,
+    toYaw: Math.atan2(cameraPos.x - targetPos.x, cameraPos.z - targetPos.z),
+    fromPitch: camera.pitch,
+    toPitch: clamp(Math.asin((cameraPos.y - targetPos.y) / Math.max(1e-6, length(sub(cameraPos, targetPos)))), -1.3, 1.3),
+  };
   planetSelect.value = planet.name;
   refreshInfoPanel();
 }
@@ -707,6 +740,23 @@ if (atmosphereToggle) {
 if (satellitesToggle) {
   satellitesToggle.addEventListener("change", () => {
     simulation.satellitesEnabled = satellitesToggle.checked;
+  });
+}
+
+if (planetCamToggle) {
+  planetCamToggle.addEventListener("change", () => {
+    simulation.planetCameraEnabled = planetCamToggle.checked;
+    if (simulation.planetCameraEnabled && !selectedPlanet) {
+      infoEl.textContent = "Planet Camera is on. Select a planet to follow.";
+    } else {
+      refreshInfoPanel();
+    }
+  });
+}
+
+if (labelsToggle) {
+  labelsToggle.addEventListener("change", () => {
+    simulation.labelsEnabled = labelsToggle.checked;
   });
 }
 
@@ -944,6 +994,44 @@ function drawMoonOrbit(planet, moon, basis) {
     ctx.lineTo(b.x, b.y);
     ctx.stroke();
   }
+}
+
+function drawProjectedLabels() {
+  if (!simulation.labelsEnabled || projectedLabels.length === 0) return;
+
+  ctx.save();
+  ctx.font = "600 12px 'Space Grotesk', sans-serif";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+
+  projectedLabels.sort((a, b) => b.zCam - a.zCam);
+
+  for (const l of projectedLabels) {
+    const labelY = l.y - (l.rPx + 12);
+    if (labelY < 10 || l.x < 8 || l.x > width - 8) continue;
+
+    const textW = Math.max(16, ctx.measureText(l.name).width);
+    const w = textW + 14;
+    const h = 18;
+    const x0 = l.x - w * 0.5;
+    const y0 = labelY - h * 0.5;
+
+    ctx.fillStyle = "rgba(6, 14, 28, 0.62)";
+    ctx.beginPath();
+    ctx.roundRect(x0, y0, w, h, 9);
+    ctx.fill();
+
+    ctx.strokeStyle = l.kind === "sun" ? "rgba(255,195,120,0.62)" : "rgba(145,190,255,0.35)";
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.roundRect(x0, y0, w, h, 9);
+    ctx.stroke();
+
+    ctx.fillStyle = l.kind === "sun" ? "rgba(255,232,185,0.98)" : "rgba(222,238,255,0.96)";
+    ctx.fillText(l.name, l.x, labelY + 0.5);
+  }
+
+  ctx.restore();
 }
 
 function drawSphere(screen, rPx, baseColor, glow = false) {
@@ -1310,6 +1398,7 @@ function updatePlanetPositions(dt) {
 function renderBodies(basis) {
   const entries = [];
   projectedPlanets.length = 0;
+  projectedLabels.length = 0;
 
   for (const p of planets) {
     const screen = project(p.position, basis);
@@ -1320,6 +1409,14 @@ function renderBodies(basis) {
   const sunScreen = project(sun.position, basis);
   if (sunScreen) {
     entries.push({ type: "sun", screen: sunScreen, depth: sunScreen.zCam });
+    projectedLabels.push({
+      name: "Sun",
+      x: sunScreen.x,
+      y: sunScreen.y,
+      zCam: sunScreen.zCam,
+      rPx: clamp(sun.radius * sunScreen.scalePx, 0.2, 200),
+      kind: "sun",
+    });
   }
 
   if (simulation.satellitesEnabled) {
@@ -1328,6 +1425,14 @@ function renderBodies(basis) {
         const ms = project(m.position, basis);
         if (!ms) continue;
         entries.push({ type: "satellite", planet: p, moon: m, screen: ms, depth: ms.zCam });
+        projectedLabels.push({
+          name: m.name,
+          x: ms.x,
+          y: ms.y,
+          zCam: ms.zCam,
+          rPx: clamp(m.radius * ms.scalePx, 0.12, 10),
+          kind: "moon",
+        });
       }
     }
   }
@@ -1360,6 +1465,14 @@ function renderBodies(basis) {
       y: e.screen.y,
       r: rPx,
       zCam: e.screen.zCam,
+    });
+    projectedLabels.push({
+      name: e.planet.name,
+      x: e.screen.x,
+      y: e.screen.y,
+      zCam: e.screen.zCam,
+      rPx,
+      kind: "planet",
     });
     if (e.planet.ring) {
       drawSaturnRingHaze(e.planet, basis, e.screen.zCam, rPx, "back");
@@ -1440,9 +1553,15 @@ function tick(timestamp) {
   }
 
   if (selectedPlanet && !flyTransition) {
-    camera.target.x = lerp(camera.target.x, selectedPlanet.position.x, 0.05);
-    camera.target.y = lerp(camera.target.y, selectedPlanet.position.y, 0.05);
-    camera.target.z = lerp(camera.target.z, selectedPlanet.position.z, 0.05);
+    if (simulation.planetCameraEnabled) {
+      camera.target.x = selectedPlanet.position.x;
+      camera.target.y = selectedPlanet.position.y;
+      camera.target.z = selectedPlanet.position.z;
+    } else {
+      camera.target.x = lerp(camera.target.x, selectedPlanet.position.x, 0.05);
+      camera.target.y = lerp(camera.target.y, selectedPlanet.position.y, 0.05);
+      camera.target.z = lerp(camera.target.z, selectedPlanet.position.z, 0.05);
+    }
   }
 
   updateCameraPosition();
@@ -1463,6 +1582,7 @@ function tick(timestamp) {
   }
 
   renderBodies(basis);
+  drawProjectedLabels();
   updateHoverState();
 
   requestAnimationFrame(tick);
