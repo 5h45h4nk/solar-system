@@ -171,6 +171,12 @@ button:hover {
   bottom: calc(env(safe-area-inset-bottom, 0px) + var(--zoom-overlay-offset, 0px) + 0.6rem);
   transform: translateX(-50%);
   z-index: 12;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: center;
+  gap: 0.45rem;
+  width: max-content;
   background: rgba(5, 12, 26, 0.38);
   border: 1px solid rgba(150, 195, 255, 0.28);
   border-radius: 999px;
@@ -180,6 +186,7 @@ button:hover {
 
 .zoom-overlay button {
   min-width: 110px;
+  white-space: nowrap;
   padding: 0.5rem 0.75rem;
   border-radius: 999px;
   font-size: 0.82rem;
