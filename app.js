@@ -9,6 +9,7 @@ const timePresetSelect = document.querySelector("#time-preset");
 const resetTimeBtn = document.querySelector("#reset-time-btn");
 const scaleModeSelect = document.querySelector("#scale-mode");
 const atmosphereToggle = document.querySelector("#atmosphere-toggle");
+const satellitesToggle = document.querySelector("#satellites-toggle");
 const zoomInBtn = document.querySelector("#zoom-in-btn");
 const zoomOutBtn = document.querySelector("#zoom-out-btn");
 const fullscreenBtn = document.querySelector("#fullscreen-btn");
@@ -182,6 +183,7 @@ const simulation = {
   daysPerSecond: Number(speedSlider?.value || 40),
   elapsedDays: 0,
   atmosphereEnabled: atmosphereToggle ? atmosphereToggle.checked : true,
+  satellitesEnabled: satellitesToggle ? satellitesToggle.checked : true,
   scaleMode: scaleModeSelect ? scaleModeSelect.value : "educational",
 };
 
@@ -417,6 +419,42 @@ const planets = [
   },
 ];
 
+const majorMoonDefs = {
+  Earth: [
+    { name: "Moon", diameterKm: 3474, distanceInPlanetRadii: 60.3, orbitalPeriodDays: 27.32, color: "#c7ccd6" },
+  ],
+  Mars: [
+    { name: "Phobos", diameterKm: 22.5, distanceInPlanetRadii: 2.76, orbitalPeriodDays: 0.319, color: "#9f8f7d" },
+    { name: "Deimos", diameterKm: 12.4, distanceInPlanetRadii: 6.92, orbitalPeriodDays: 1.263, color: "#b0a18b" },
+  ],
+  Jupiter: [
+    { name: "Io", diameterKm: 3643, distanceInPlanetRadii: 5.9, orbitalPeriodDays: 1.769, color: "#d8c49a" },
+    { name: "Europa", diameterKm: 3122, distanceInPlanetRadii: 9.4, orbitalPeriodDays: 3.551, color: "#c5b9a8" },
+    { name: "Ganymede", diameterKm: 5268, distanceInPlanetRadii: 15.0, orbitalPeriodDays: 7.155, color: "#b1a88e" },
+    { name: "Callisto", diameterKm: 4821, distanceInPlanetRadii: 26.3, orbitalPeriodDays: 16.689, color: "#9f9682" },
+  ],
+  Saturn: [
+    { name: "Titan", diameterKm: 5150, distanceInPlanetRadii: 20.3, orbitalPeriodDays: 15.95, color: "#d3b791" },
+    { name: "Rhea", diameterKm: 1528, distanceInPlanetRadii: 8.7, orbitalPeriodDays: 4.52, color: "#c6bca7" },
+    { name: "Iapetus", diameterKm: 1469, distanceInPlanetRadii: 59.0, orbitalPeriodDays: 79.3, color: "#a89f8a" },
+    { name: "Dione", diameterKm: 1123, distanceInPlanetRadii: 6.3, orbitalPeriodDays: 2.74, color: "#d0c7b2" },
+    { name: "Tethys", diameterKm: 1062, distanceInPlanetRadii: 4.9, orbitalPeriodDays: 1.89, color: "#ddd4bf" },
+    { name: "Enceladus", diameterKm: 504, distanceInPlanetRadii: 3.95, orbitalPeriodDays: 1.37, color: "#ebedf2" },
+    { name: "Mimas", diameterKm: 396, distanceInPlanetRadii: 3.08, orbitalPeriodDays: 0.94, color: "#c6c9d2" },
+  ],
+  Uranus: [
+    { name: "Titania", diameterKm: 1578, distanceInPlanetRadii: 17.1, orbitalPeriodDays: 8.7, color: "#b6c5cf" },
+    { name: "Oberon", diameterKm: 1523, distanceInPlanetRadii: 23.0, orbitalPeriodDays: 13.46, color: "#aeb4bf" },
+    { name: "Umbriel", diameterKm: 1169, distanceInPlanetRadii: 10.5, orbitalPeriodDays: 4.14, color: "#89909c" },
+    { name: "Ariel", diameterKm: 1158, distanceInPlanetRadii: 7.53, orbitalPeriodDays: 2.52, color: "#c6d0d9" },
+    { name: "Miranda", diameterKm: 472, distanceInPlanetRadii: 5.1, orbitalPeriodDays: 1.41, color: "#d7dce3" },
+  ],
+  Neptune: [
+    { name: "Triton", diameterKm: 2707, distanceInPlanetRadii: 14.3, orbitalPeriodDays: -5.88, color: "#c5cad6" },
+    { name: "Proteus", diameterKm: 420, distanceInPlanetRadii: 4.7, orbitalPeriodDays: 1.12, color: "#9fa7b3" },
+  ],
+};
+
 for (const p of planets) {
   const option = document.createElement("option");
   option.value = p.name;
@@ -441,6 +479,23 @@ for (const p of planets) {
   p.physicalRadius = EARTH_VISUAL_RADIUS * (p.diameterKm / EARTH_DIAMETER_KM);
   p.physicalDistance = p.distanceAU * PHYSICAL_DISTANCE_SCALE;
   p.spinPeriodDays = (p.spinPeriodHours || 24) / 24;
+  p.moons = (majorMoonDefs[p.name] || []).map((m, idx) => ({
+    ...m,
+    angle: Math.random() * TAU,
+    inclination: (idx % 2 === 0 ? 1 : -1) * (0.04 + (idx % 3) * 0.02),
+    orbitDistance: 0,
+    radius: 0,
+    position: vec(),
+  }));
+}
+
+function updateMoonScales() {
+  for (const p of planets) {
+    for (const m of p.moons || []) {
+      m.radius = clamp((m.diameterKm / p.diameterKm) * p.radius, 0.45, p.radius * 0.42);
+      m.orbitDistance = clamp(m.distanceInPlanetRadii * p.radius, p.radius * 2.1, p.radius * 55);
+    }
+  }
 }
 
 function applyScaleMode(mode) {
@@ -457,6 +512,7 @@ function applyScaleMode(mode) {
     p.position.z = Math.sin(p.angle) * p.distance;
     p.position.y = p.position.z * p.orbitTilt;
   }
+  updateMoonScales();
 
   if (typeof sun !== "undefined") {
     sun.radius = simulation.scaleMode === "physical" ? sun.physicalRadius : sun.educationalRadius;
@@ -613,6 +669,12 @@ if (scaleModeSelect) {
 if (atmosphereToggle) {
   atmosphereToggle.addEventListener("change", () => {
     simulation.atmosphereEnabled = atmosphereToggle.checked;
+  });
+}
+
+if (satellitesToggle) {
+  satellitesToggle.addEventListener("change", () => {
+    simulation.satellitesEnabled = satellitesToggle.checked;
   });
 }
 
@@ -816,6 +878,31 @@ function drawOrbit(distance, tilt, basis) {
   ctx.strokeStyle = "rgba(80,120,170,0.35)";
   ctx.lineWidth = 1;
 
+  for (let i = 0; i < steps; i += 1) {
+    const a = projected[i];
+    const b = projected[(i + 1) % steps];
+    if (!a || !b) continue;
+    ctx.beginPath();
+    ctx.moveTo(a.x, a.y);
+    ctx.lineTo(b.x, b.y);
+    ctx.stroke();
+  }
+}
+
+function drawMoonOrbit(planet, moon, basis) {
+  const steps = 72;
+  const projected = new Array(steps);
+
+  for (let i = 0; i < steps; i += 1) {
+    const t = (i / steps) * TAU;
+    const x = Math.cos(t) * moon.orbitDistance;
+    const z = Math.sin(t) * moon.orbitDistance;
+    const y = z * moon.inclination;
+    projected[i] = project(vec(planet.position.x + x, planet.position.y + y, planet.position.z + z), basis);
+  }
+
+  ctx.strokeStyle = "rgba(170,185,215,0.23)";
+  ctx.lineWidth = 0.7;
   for (let i = 0; i < steps; i += 1) {
     const a = projected[i];
     const b = projected[(i + 1) % steps];
@@ -1157,6 +1244,18 @@ function updatePlanetPositions(dt) {
     p.position.x = Math.cos(p.angle) * p.distance;
     p.position.z = Math.sin(p.angle) * p.distance;
     p.position.y = p.position.z * p.orbitTilt;
+
+    if (simulation.satellitesEnabled && p.moons && p.moons.length > 0) {
+      for (const m of p.moons) {
+        m.angle += (TAU * simDaysDelta) / m.orbitalPeriodDays;
+        const mx = Math.cos(m.angle) * m.orbitDistance;
+        const mz = Math.sin(m.angle) * m.orbitDistance;
+        const my = mz * m.inclination;
+        m.position.x = p.position.x + mx;
+        m.position.y = p.position.y + my;
+        m.position.z = p.position.z + mz;
+      }
+    }
   }
   if (simulation.scaleMode === "physical") {
     sun.spin += (TAU * simDaysDelta) / 25.05;
@@ -1181,6 +1280,16 @@ function renderBodies(basis) {
     entries.push({ type: "sun", screen: sunScreen, depth: sunScreen.zCam });
   }
 
+  if (simulation.satellitesEnabled) {
+    for (const p of planets) {
+      for (const m of p.moons || []) {
+        const ms = project(m.position, basis);
+        if (!ms) continue;
+        entries.push({ type: "satellite", planet: p, moon: m, screen: ms, depth: ms.zCam });
+      }
+    }
+  }
+
   entries.sort((a, b) => b.depth - a.depth);
 
   for (const e of entries) {
@@ -1190,6 +1299,12 @@ function renderBodies(basis) {
       const sunViewDir = normalize(sub(camera.position, sun.position));
       const sunPhaseU = Math.atan2(sunViewDir.x, sunViewDir.z) / TAU;
       drawTexturedSphere(e.screen, rPx, sun.texture, "#ffcc65", sun.spin, sunPhaseU);
+      continue;
+    }
+
+    if (e.type === "satellite") {
+      const mrPx = clamp(e.moon.radius * e.screen.scalePx, 0.7, 10);
+      drawSphere(e.screen, mrPx, e.moon.color || "#c4ccd9", false);
       continue;
     }
 
@@ -1293,6 +1408,13 @@ function tick(timestamp) {
 
   for (const p of planets) {
     drawOrbit(p.distance, p.orbitTilt, basis);
+  }
+  if (simulation.satellitesEnabled) {
+    for (const p of planets) {
+      for (const m of p.moons || []) {
+        drawMoonOrbit(p, m, basis);
+      }
+    }
   }
 
   renderBodies(basis);
