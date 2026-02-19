@@ -5,6 +5,9 @@ const planetSelect = document.querySelector("#planet-search");
 const speedSlider = document.querySelector("#speed-slider");
 const speedValue = document.querySelector("#speed-value");
 const yearsValue = document.querySelector("#years-value");
+const timePresetSelect = document.querySelector("#time-preset");
+const resetTimeBtn = document.querySelector("#reset-time-btn");
+const scaleModeSelect = document.querySelector("#scale-mode");
 const atmosphereToggle = document.querySelector("#atmosphere-toggle");
 const zoomInBtn = document.querySelector("#zoom-in-btn");
 const zoomOutBtn = document.querySelector("#zoom-out-btn");
@@ -21,6 +24,12 @@ if (!ctx) {
 }
 
 const TAU = Math.PI * 2;
+const CAMERA_MIN_RADIUS = 35;
+const CAMERA_MAX_RADIUS = 3500;
+const PHYSICAL_DISTANCE_SCALE = 55;
+const EARTH_VISUAL_RADIUS = 5.7;
+const EARTH_DIAMETER_KM = 12742;
+const SUN_DIAMETER_KM = 1392700;
 
 const camera = {
   target: { x: 0, y: 0, z: 0 },
@@ -172,6 +181,7 @@ const simulation = {
   daysPerSecond: Number(speedSlider?.value || 40),
   elapsedDays: 0,
   atmosphereEnabled: atmosphereToggle ? atmosphereToggle.checked : true,
+  scaleMode: scaleModeSelect ? scaleModeSelect.value : "educational",
 };
 
 function setHudCollapsed(collapsed) {
@@ -259,6 +269,7 @@ const planets = [
     diameterKm: 4879,
     dayLength: "1408 h",
     yearLength: "88 days",
+    distanceAU: 0.39,
     orbitalPeriodDays: 88,
     radius: 3.2,
     distance: 50,
@@ -275,6 +286,7 @@ const planets = [
     diameterKm: 12104,
     dayLength: "5832 h",
     yearLength: "225 days",
+    distanceAU: 0.72,
     orbitalPeriodDays: 225,
     radius: 5.2,
     distance: 72,
@@ -292,6 +304,7 @@ const planets = [
     diameterKm: 12742,
     dayLength: "24 h",
     yearLength: "365 days",
+    distanceAU: 1,
     orbitalPeriodDays: 365.25,
     radius: 5.7,
     distance: 96,
@@ -309,6 +322,7 @@ const planets = [
     diameterKm: 6779,
     dayLength: "24.6 h",
     yearLength: "687 days",
+    distanceAU: 1.52,
     orbitalPeriodDays: 687,
     radius: 4.4,
     distance: 122,
@@ -326,6 +340,7 @@ const planets = [
     diameterKm: 139820,
     dayLength: "9.9 h",
     yearLength: "4333 days",
+    distanceAU: 5.2,
     orbitalPeriodDays: 4333,
     radius: 14.5,
     distance: 178,
@@ -342,6 +357,7 @@ const planets = [
     diameterKm: 116460,
     dayLength: "10.7 h",
     yearLength: "10759 days",
+    distanceAU: 9.58,
     orbitalPeriodDays: 10759,
     radius: 12.1,
     distance: 240,
@@ -360,6 +376,7 @@ const planets = [
     diameterKm: 50724,
     dayLength: "17.2 h",
     yearLength: "30687 days",
+    distanceAU: 19.2,
     orbitalPeriodDays: 30687,
     radius: 9,
     distance: 300,
@@ -377,6 +394,7 @@ const planets = [
     diameterKm: 49244,
     dayLength: "16.1 h",
     yearLength: "60190 days",
+    distanceAU: 30.05,
     orbitalPeriodDays: 60190,
     radius: 8.8,
     distance: 356,
@@ -407,11 +425,43 @@ for (const p of planets) {
   }
 }
 
+for (const p of planets) {
+  p.educationalRadius = p.radius;
+  p.educationalDistance = p.distance;
+  p.physicalRadius = EARTH_VISUAL_RADIUS * (p.diameterKm / EARTH_DIAMETER_KM);
+  p.physicalDistance = p.distanceAU * PHYSICAL_DISTANCE_SCALE;
+}
+
+function applyScaleMode(mode) {
+  simulation.scaleMode = mode === "physical" ? "physical" : "educational";
+  for (const p of planets) {
+    if (simulation.scaleMode === "physical") {
+      p.radius = p.physicalRadius;
+      p.distance = p.physicalDistance;
+    } else {
+      p.radius = p.educationalRadius;
+      p.distance = p.educationalDistance;
+    }
+    p.position.x = Math.cos(p.angle) * p.distance;
+    p.position.z = Math.sin(p.angle) * p.distance;
+    p.position.y = p.position.z * p.orbitTilt;
+  }
+
+  if (typeof sun !== "undefined") {
+    sun.radius = simulation.scaleMode === "physical" ? sun.physicalRadius : sun.educationalRadius;
+  }
+}
+
 const sun = {
   position: vec(0, 0, 0),
   radius: 22,
+  educationalRadius: 22,
+  // Compressed physical scaling to keep the scene explorable while preserving "bigger than planets" relation.
+  physicalRadius: Math.min(150, EARTH_VISUAL_RADIUS * (SUN_DIAMETER_KM / EARTH_DIAMETER_KM) * 0.18),
   spin: 0,
 };
+
+applyScaleMode(simulation.scaleMode);
 
 loadFirstImage(texturePathCandidates.Sun, (img) => {
   sun.texture = img;
@@ -429,7 +479,8 @@ function updatePlanetInfo(planet, mode = "focus") {
   }
 
   const prefix = mode === "hover" ? "Hovering" : "Focused";
-  infoEl.innerHTML = `${prefix}: <strong>${planet.name}</strong> (${planet.type})<br>${planet.summary}<br>Diameter: ${planet.diameterKm.toLocaleString()} km | Distance: ${planet.distance} AU (scaled) | Day: ${planet.dayLength} | Year: ${planet.yearLength}`;
+  const scaleLabel = simulation.scaleMode === "physical" ? "Relative physical size mode" : "Educational scale mode";
+  infoEl.innerHTML = `${prefix}: <strong>${planet.name}</strong> (${planet.type})<br>${planet.summary}<br>Diameter: ${planet.diameterKm.toLocaleString()} km | Orbit: ${planet.distanceAU} AU | Day: ${planet.dayLength} | Year: ${planet.yearLength}<br>${scaleLabel}`;
 }
 
 function refreshInfoPanel() {
@@ -461,14 +512,15 @@ function startFly(toTarget, toRadius, toYaw = camera.yaw, toPitch = camera.pitch
 
 function flyToOverview() {
   selectedPlanet = null;
-  startFly(vec(0, 0, 0), 520, 0.2, 0.28, 1600);
+  const overviewRadius = simulation.scaleMode === "physical" ? 1700 : 520;
+  startFly(vec(0, 0, 0), overviewRadius, 0.2, 0.28, 1600);
   refreshInfoPanel();
 }
 
 function flyToPlanet(planet) {
   if (!planet) return;
   selectedPlanet = planet;
-  const dist = clamp(planet.radius * 14 + 40, 85, 190);
+  const dist = clamp(planet.radius * 14 + 40, 85, 650);
   startFly(planet.position, dist, camera.yaw + 0.8, 0.22, 1900);
   planetSelect.value = planet.name;
   refreshInfoPanel();
@@ -496,7 +548,10 @@ function onFlyRequest() {
 }
 
 function updateSimulationLabels() {
-  speedValue.textContent = `${simulation.daysPerSecond.toFixed(0)} days/s`;
+  const speedText = simulation.daysPerSecond >= 1
+    ? simulation.daysPerSecond.toFixed(0)
+    : simulation.daysPerSecond.toFixed(5);
+  speedValue.textContent = `${speedText} days/s`;
   yearsValue.textContent = `${(simulation.elapsedDays / 365.25).toFixed(2)} years elapsed`;
 }
 
@@ -505,8 +560,36 @@ overviewBtn.addEventListener("click", flyToOverview);
 planetSelect.addEventListener("change", onFlyRequest);
 speedSlider.addEventListener("input", () => {
   simulation.daysPerSecond = Number(speedSlider.value);
+  if (timePresetSelect) timePresetSelect.value = "";
   updateSimulationLabels();
 });
+
+if (timePresetSelect) {
+  timePresetSelect.addEventListener("change", () => {
+    simulation.daysPerSecond = Number(timePresetSelect.value);
+    speedSlider.value = String(simulation.daysPerSecond);
+    updateSimulationLabels();
+  });
+}
+
+if (resetTimeBtn) {
+  resetTimeBtn.addEventListener("click", () => {
+    simulation.elapsedDays = 0;
+    updateSimulationLabels();
+  });
+}
+
+if (scaleModeSelect) {
+  scaleModeSelect.addEventListener("change", () => {
+    applyScaleMode(scaleModeSelect.value);
+    if (selectedPlanet) {
+      flyToPlanet(selectedPlanet);
+    } else {
+      flyToOverview();
+    }
+    refreshInfoPanel();
+  });
+}
 
 if (atmosphereToggle) {
   atmosphereToggle.addEventListener("change", () => {
@@ -516,13 +599,13 @@ if (atmosphereToggle) {
 
 if (zoomInBtn) {
   zoomInBtn.addEventListener("click", () => {
-    camera.radius = clamp(camera.radius * 0.86, 35, 1600);
+    camera.radius = clamp(camera.radius * 0.86, CAMERA_MIN_RADIUS, CAMERA_MAX_RADIUS);
   });
 }
 
 if (zoomOutBtn) {
   zoomOutBtn.addEventListener("click", () => {
-    camera.radius = clamp(camera.radius * 1.16, 35, 1600);
+    camera.radius = clamp(camera.radius * 1.16, CAMERA_MIN_RADIUS, CAMERA_MAX_RADIUS);
   });
 }
 
@@ -570,7 +653,7 @@ canvas.addEventListener("pointermove", (e) => {
       const pts = Array.from(touchPoints.values());
       const dist = Math.max(1, distance2D(pts[0], pts[1]));
       const ratio = pinchStartDistance / dist;
-      camera.radius = clamp(pinchStartRadius * ratio, 35, 1600);
+      camera.radius = clamp(pinchStartRadius * ratio, CAMERA_MIN_RADIUS, CAMERA_MAX_RADIUS);
       return;
     }
 
@@ -635,7 +718,7 @@ canvas.addEventListener("pointerleave", () => {
 canvas.addEventListener("wheel", (e) => {
   e.preventDefault();
   const delta = Math.sign(e.deltaY);
-  camera.radius = clamp(camera.radius * (1 + delta * 0.08), 35, 1600);
+  camera.radius = clamp(camera.radius * (1 + delta * 0.08), CAMERA_MIN_RADIUS, CAMERA_MAX_RADIUS);
 }, { passive: false });
 
 if (fullscreenBtn) {
