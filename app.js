@@ -854,17 +854,20 @@ function shadeSphereBySun(screen, rPx, lightCam, glossy = 0.25) {
 function drawSaturnRing(planet, basis, centerDepth, planetPx, part = "full") {
   const innerR = planet.radius * 1.45;
   const outerR = planet.radius * 2.5;
-  const bands = 10;
-  const steps = 220;
-  const baseAlpha = part === "back" ? 0.44 : 0.68;
+  const bands = 22;
+  const steps = 260;
+  const baseAlpha = part === "back" ? 0.28 : 0.48;
 
   for (let i = 0; i < bands; i += 1) {
     const t = i / Math.max(1, bands - 1);
     const rr = lerp(innerR, outerR, t);
-    const tone = 172 + Math.floor(46 * t);
-    const alpha = baseAlpha * (0.72 + 0.28 * Math.sin((i + 1) * 1.9));
-    ctx.strokeStyle = `rgba(${tone + 18}, ${tone + 8}, ${tone - 18}, ${alpha.toFixed(3)})`;
-    ctx.lineWidth = Math.max(0.7, planetPx * (0.03 + 0.007 * (i % 3)));
+    const cassiniGap = 1 - 0.92 * Math.exp(-Math.pow((t - 0.58) / 0.055, 2));
+    const densityRipple = 0.72 + 0.28 * Math.sin((i + 1) * 2.4);
+    const alpha = baseAlpha * densityRipple * cassiniGap;
+    const tone = 150 + Math.floor(75 * t);
+    const warm = 10 + Math.floor(18 * (1 - t));
+    ctx.strokeStyle = `rgba(${tone + warm}, ${tone + 2}, ${tone - 30}, ${alpha.toFixed(3)})`;
+    ctx.lineWidth = Math.max(0.32, planetPx * (0.012 + 0.002 * (i % 4)));
     for (let k = 0; k < steps; k += 1) {
       const a0 = (k / steps) * TAU;
       const a1 = ((k + 1) / steps) * TAU;
@@ -897,6 +900,90 @@ function drawSaturnRing(planet, basis, centerDepth, planetPx, part = "full") {
       ctx.stroke();
     }
   }
+}
+
+function drawSaturnRingHaze(planet, basis, centerDepth, planetPx, part = "full") {
+  const innerR = planet.radius * 1.36;
+  const outerR = planet.radius * 2.72;
+  const hazeBands = 8;
+  const steps = 180;
+  const baseAlpha = part === "back" ? 0.05 : 0.09;
+
+  for (let i = 0; i < hazeBands; i += 1) {
+    const t = i / Math.max(1, hazeBands - 1);
+    const rr = lerp(innerR, outerR, t);
+    const alpha = baseAlpha * (1 - Math.abs(t - 0.55) * 0.9);
+    ctx.strokeStyle = `rgba(210, 195, 165, ${alpha.toFixed(3)})`;
+    ctx.lineWidth = Math.max(0.8, planetPx * 0.028);
+
+    for (let k = 0; k < steps; k += 1) {
+      const a0 = (k / steps) * TAU;
+      const a1 = ((k + 1) / steps) * TAU;
+
+      let p0 = vec(Math.cos(a0) * rr, 0, Math.sin(a0) * rr);
+      let p1 = vec(Math.cos(a1) * rr, 0, Math.sin(a1) * rr);
+
+      const tilt = planet.ringTilt || 0.55;
+      p0 = rotateX(p0, tilt);
+      p1 = rotateX(p1, tilt);
+
+      const ringYaw = planet.angle * 0.35;
+      p0 = rotateY(p0, ringYaw);
+      p1 = rotateY(p1, ringYaw);
+
+      p0 = add(planet.position, p0);
+      p1 = add(planet.position, p1);
+
+      const s0 = project(p0, basis);
+      const s1 = project(p1, basis);
+      if (!s0 || !s1) continue;
+
+      const segFront = (s0.zCam + s1.zCam) * 0.5 < centerDepth;
+      if ((part === "front" && !segFront) || (part === "back" && segFront)) continue;
+
+      ctx.beginPath();
+      ctx.moveTo(s0.x, s0.y);
+      ctx.lineTo(s1.x, s1.y);
+      ctx.stroke();
+    }
+  }
+}
+
+function getSaturnRingScreenAngle(planet, basis) {
+  const tilt = planet.ringTilt || 0.55;
+  const ringYaw = planet.angle * 0.35;
+  const r = planet.radius * 2.2;
+
+  let a = vec(-r, 0, 0);
+  let b = vec(r, 0, 0);
+  a = rotateY(rotateX(a, tilt), ringYaw);
+  b = rotateY(rotateX(b, tilt), ringYaw);
+  a = add(planet.position, a);
+  b = add(planet.position, b);
+
+  const sa = project(a, basis);
+  const sb = project(b, basis);
+  if (!sa || !sb) return -0.25;
+  return Math.atan2(sb.y - sa.y, sb.x - sa.x);
+}
+
+function drawSaturnRingShadowOnPlanet(screen, planetPx, angle) {
+  ctx.save();
+  ctx.beginPath();
+  ctx.arc(screen.x, screen.y, planetPx, 0, TAU);
+  ctx.clip();
+
+  ctx.translate(screen.x, screen.y);
+  ctx.rotate(angle);
+  const shadow = ctx.createLinearGradient(0, -planetPx * 0.62, 0, planetPx * 0.62);
+  shadow.addColorStop(0, "rgba(0,0,0,0)");
+  shadow.addColorStop(0.38, "rgba(0,0,0,0.06)");
+  shadow.addColorStop(0.5, "rgba(0,0,0,0.24)");
+  shadow.addColorStop(0.62, "rgba(0,0,0,0.06)");
+  shadow.addColorStop(1, "rgba(0,0,0,0)");
+  ctx.fillStyle = shadow;
+  ctx.fillRect(-planetPx * 1.4, -planetPx * 0.62, planetPx * 2.8, planetPx * 1.24);
+  ctx.restore();
 }
 
 function updatePlanetPositions(dt) {
@@ -949,11 +1036,19 @@ function renderBodies(basis) {
       r: rPx,
       zCam: e.screen.zCam,
     });
-    if (e.planet.ring) drawSaturnRing(e.planet, basis, e.screen.zCam, rPx, "back");
+    if (e.planet.ring) {
+      drawSaturnRingHaze(e.planet, basis, e.screen.zCam, rPx, "back");
+      drawSaturnRing(e.planet, basis, e.screen.zCam, rPx, "back");
+    }
     const viewDir = normalize(sub(camera.position, e.planet.position));
     const phaseU = Math.atan2(viewDir.x, viewDir.z) / TAU;
     drawTexturedSphere(e.screen, rPx, e.planet.texture, e.planet.color, e.planet.spin, phaseU);
-    if (e.planet.ring) drawSaturnRing(e.planet, basis, e.screen.zCam, rPx, "front");
+    if (e.planet.ring) {
+      const ringAngle = getSaturnRingScreenAngle(e.planet, basis);
+      drawSaturnRingShadowOnPlanet(e.screen, rPx, ringAngle);
+      drawSaturnRing(e.planet, basis, e.screen.zCam, rPx, "front");
+      drawSaturnRingHaze(e.planet, basis, e.screen.zCam, rPx, "front");
+    }
     const lightWorld = normalize(sub(sun.position, e.planet.position));
     const lightCam = {
       x: dot(lightWorld, basis.right),
