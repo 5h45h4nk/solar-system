@@ -1,6 +1,7 @@
 const canvas = document.querySelector("#scene");
 const hudEl = document.querySelector(".hud");
 const hudToggleBtn = document.querySelector("#hud-toggle");
+const hudTitleEl = document.querySelector(".title-wrap");
 const planetSelect = document.querySelector("#planet-search");
 const speedSlider = document.querySelector("#speed-slider");
 const speedValue = document.querySelector("#speed-value");
@@ -251,6 +252,56 @@ if (window.matchMedia("(max-width: 720px)").matches) {
 if (hudToggleBtn) {
   hudToggleBtn.addEventListener("click", () => {
     setHudCollapsed(!hudEl.classList.contains("collapsed"));
+  });
+}
+
+let hudDragStartY = null;
+let hudDragDeltaY = 0;
+let hudDragPointerId = null;
+
+function isMobileViewport() {
+  return window.matchMedia("(max-width: 720px)").matches;
+}
+
+if (hudTitleEl) {
+  hudTitleEl.addEventListener("pointerdown", (e) => {
+    if (!isMobileViewport()) return;
+    if (e.pointerType === "mouse") return;
+    hudDragPointerId = e.pointerId;
+    hudDragStartY = e.clientY;
+    hudDragDeltaY = 0;
+    hudTitleEl.setPointerCapture(e.pointerId);
+  });
+
+  hudTitleEl.addEventListener("pointermove", (e) => {
+    if (!isMobileViewport()) return;
+    if (hudDragStartY === null || e.pointerId !== hudDragPointerId) return;
+    hudDragDeltaY = e.clientY - hudDragStartY;
+  });
+
+  hudTitleEl.addEventListener("pointerup", (e) => {
+    if (!isMobileViewport()) return;
+    if (e.pointerId !== hudDragPointerId) return;
+
+    const threshold = 18;
+    if (hudDragDeltaY > threshold) {
+      setHudCollapsed(true);
+    } else if (hudDragDeltaY < -threshold) {
+      setHudCollapsed(false);
+    }
+
+    hudDragStartY = null;
+    hudDragDeltaY = 0;
+    hudDragPointerId = null;
+    if (hudTitleEl.hasPointerCapture(e.pointerId)) {
+      hudTitleEl.releasePointerCapture(e.pointerId);
+    }
+  });
+
+  hudTitleEl.addEventListener("pointercancel", () => {
+    hudDragStartY = null;
+    hudDragDeltaY = 0;
+    hudDragPointerId = null;
   });
 }
 
@@ -820,17 +871,43 @@ if (labelsToggle) {
   });
 }
 
-if (zoomInBtn) {
-  zoomInBtn.addEventListener("click", () => {
-    camera.radius = clamp(camera.radius * 0.55, CAMERA_MIN_RADIUS, CAMERA_MAX_RADIUS);
+function bindZoomButton(btn, factor) {
+  if (!btn) return;
+  let lastTouchAt = 0;
+
+  const applyZoom = () => {
+    camera.radius = clamp(camera.radius * factor, CAMERA_MIN_RADIUS, CAMERA_MAX_RADIUS);
+  };
+
+  btn.addEventListener("click", (e) => {
+    if (performance.now() - lastTouchAt < 450) {
+      e.preventDefault();
+      return;
+    }
+    e.preventDefault();
+    applyZoom();
+  });
+
+  // On iOS Safari, double tap can trigger page zoom unless touchend is consumed.
+  btn.addEventListener(
+    "touchend",
+    (e) => {
+      lastTouchAt = performance.now();
+      e.preventDefault();
+      e.stopPropagation();
+      applyZoom();
+    },
+    { passive: false },
+  );
+
+  btn.addEventListener("dblclick", (e) => {
+    e.preventDefault();
+    e.stopPropagation();
   });
 }
 
-if (zoomOutBtn) {
-  zoomOutBtn.addEventListener("click", () => {
-    camera.radius = clamp(camera.radius * 1.38, CAMERA_MIN_RADIUS, CAMERA_MAX_RADIUS);
-  });
-}
+bindZoomButton(zoomInBtn, 0.55);
+bindZoomButton(zoomOutBtn, 1.38);
 
 let dragging = false;
 let lastX = 0;

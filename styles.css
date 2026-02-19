@@ -180,6 +180,10 @@ button:hover {
   border-radius: 999px;
   padding: 0.35rem;
   backdrop-filter: blur(8px);
+  touch-action: manipulation;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
 }
 
 .zoom-overlay button {
@@ -194,6 +198,11 @@ button:hover {
   font-size: 0.82rem;
   background: rgba(24, 67, 135, 0.72);
   border: 1px solid rgba(145, 190, 255, 0.35);
+  touch-action: manipulation;
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
 }
 
 @media (max-width: 720px) {
@@ -214,7 +223,11 @@ button:hover {
   }
 
   .hud-toggle {
-    display: inline-block;
+    display: none;
+  }
+
+  .title-wrap {
+    touch-action: none;
   }
 
   .hud.collapsed .hud-body {
