@@ -41,3 +41,13 @@ Use these exact filenames:
 - `neptune.jpg`
 
 Recommended maps are equirectangular (`2:1`) at `1024x512` or higher.
+
+## Get GitHub Pages URL
+
+After your first push/deploy, print the live Pages URL with:
+
+```bash
+npm run pages:url
+```
+
+If Pages is still provisioning, wait for the GitHub Actions deployment to finish and run it again.

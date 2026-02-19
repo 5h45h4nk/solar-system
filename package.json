@@ -4,7 +4,8 @@
   "description": "An ultra-realistic interactive 3D solar system built with Three.js.",
   "main": "app.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "pages:url": "bash scripts/pages-url.sh"
   },
   "keywords": [],
   "author": "",
