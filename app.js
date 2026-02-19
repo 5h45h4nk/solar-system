@@ -1144,6 +1144,88 @@ function drawProjectedLabels() {
   ctx.restore();
 }
 
+function drawSunDirectionIndicator(basis) {
+  const rel = sub(sun.position, camera.position);
+  const sunScreen = project(sun.position, basis);
+  let xCam = dot(rel, basis.right);
+  let yCam = dot(rel, basis.up);
+  const zCam = dot(rel, basis.forward);
+
+  // Use perspective-aware direction (x/z, y/z) so indicator aligns with 3D view.
+  let dz = zCam;
+  if (Math.abs(dz) < 1e-6) dz = dz < 0 ? -1e-6 : 1e-6;
+  let dx = xCam / dz;
+  let dy = -yCam / dz;
+
+  // If Sun is behind the camera, mirror direction to indicate turn-around.
+  if (zCam < 0) {
+    dx *= -1;
+    dy *= -1;
+  }
+
+  const mag = Math.hypot(dx, dy);
+  if (mag < 1e-5) {
+    dx = 0;
+    dy = -1;
+  } else {
+    dx /= mag;
+    dy /= mag;
+  }
+
+  const cx = width * 0.5;
+  const cy = height * 0.5;
+  const ringR = Math.min(width, height) * 0.42;
+  const edgeX = cx + dx * ringR;
+  const edgeY = cy + dy * ringR;
+
+  let ax = edgeX;
+  let ay = edgeY;
+  let angle = Math.atan2(dy, dx);
+  let size = 18;
+  let alphaMul = 1;
+
+  const sunIsVisible = !!(sunScreen && sunScreen.x >= 0 && sunScreen.x <= width && sunScreen.y >= 0 && sunScreen.y <= height);
+  if (sunIsVisible) {
+    // As the Sun moves deeper on-screen, arrow "falls into" it, shrinks, then disappears.
+    const distToCenter = Math.hypot(sunScreen.x - cx, sunScreen.y - cy);
+    const t = clamp(1 - distToCenter / Math.max(1e-6, ringR), 0, 1);
+    ax = lerp(edgeX, sunScreen.x, t);
+    ay = lerp(edgeY, sunScreen.y, t);
+    angle = Math.atan2(sunScreen.y - edgeY, sunScreen.x - edgeX);
+    size = lerp(18, 3, t);
+    alphaMul = 1 - t;
+    if (alphaMul <= 0.02) return;
+  }
+
+  ctx.save();
+  ctx.translate(ax, ay);
+  ctx.rotate(angle);
+
+  // Glow halo
+  const glow = ctx.createRadialGradient(0, 0, 0, 0, 0, size * 1.8);
+  glow.addColorStop(0, `rgba(255, 196, 108, ${0.38 * alphaMul})`);
+  glow.addColorStop(1, "rgba(255, 140, 40, 0)");
+  ctx.fillStyle = glow;
+  ctx.beginPath();
+  ctx.arc(0, 0, size * 1.8, 0, TAU);
+  ctx.fill();
+
+  // Arrow body
+  ctx.fillStyle = `rgba(255, 204, 120, ${0.95 * alphaMul})`;
+  ctx.strokeStyle = `rgba(255, 160, 70, ${0.95 * alphaMul})`;
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.moveTo(size, 0);
+  ctx.lineTo(-size * 0.75, size * 0.62);
+  ctx.lineTo(-size * 0.18, 0);
+  ctx.lineTo(-size * 0.75, -size * 0.62);
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+
+  ctx.restore();
+}
+
 function drawSphere(screen, rPx, baseColor, glow = false) {
   if (rPx < 0.3) return;
 
@@ -1700,6 +1782,7 @@ function tick(timestamp) {
 
   renderBodies(basis);
   drawProjectedLabels();
+  drawSunDirectionIndicator(basis);
   updateHoverState();
 
   requestAnimationFrame(tick);
