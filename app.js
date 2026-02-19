@@ -1330,19 +1330,17 @@ function drawSunDirectionIndicator(basis) {
 function drawSphere(screen, rPx, baseColor, glow = false) {
   if (rPx < 0.3) return;
 
-  const grad = ctx.createRadialGradient(screen.x - rPx * 0.35, screen.y - rPx * 0.35, rPx * 0.15, screen.x, screen.y, rPx);
-
   if (glow) {
+    const grad = ctx.createRadialGradient(screen.x - rPx * 0.35, screen.y - rPx * 0.35, rPx * 0.15, screen.x, screen.y, rPx);
     grad.addColorStop(0, "#fff1a5");
     grad.addColorStop(0.36, "#ffca63");
     grad.addColorStop(1, "#cf6a18");
+    ctx.fillStyle = grad;
   } else {
-    grad.addColorStop(0, "#ffffff");
-    grad.addColorStop(0.12, baseColor);
-    grad.addColorStop(1, "#111827");
+    // Neutral albedo pass; directional light is applied later by shadeSphereBySun.
+    ctx.fillStyle = baseColor;
   }
 
-  ctx.fillStyle = grad;
   ctx.beginPath();
   ctx.arc(screen.x, screen.y, rPx, 0, TAU);
   ctx.fill();
@@ -1457,11 +1455,11 @@ function drawTexturedSphere(screen, rPx, texture, baseColor, spin = 0, phaseU = 
 
   ctx.restore();
 
-  const shade = ctx.createRadialGradient(screen.x - rPx * 0.45, screen.y - rPx * 0.45, rPx * 0.12, screen.x, screen.y, rPx);
-  shade.addColorStop(0, "rgba(255,255,255,0.45)");
-  shade.addColorStop(0.4, "rgba(255,255,255,0.02)");
-  shade.addColorStop(1, "rgba(3,8,18,0.66)");
-  ctx.fillStyle = shade;
+  // Only apply a very light neutral limb darkening; avoid fake fixed highlights.
+  const rim = ctx.createRadialGradient(screen.x, screen.y, rPx * 0.62, screen.x, screen.y, rPx * 1.02);
+  rim.addColorStop(0, "rgba(0,0,0,0)");
+  rim.addColorStop(1, "rgba(0,0,0,0.16)");
+  ctx.fillStyle = rim;
   ctx.beginPath();
   ctx.arc(screen.x, screen.y, rPx, 0, TAU);
   ctx.fill();
@@ -1508,6 +1506,7 @@ function shadeSphereBySun(screen, rPx, lightCam, glossy = 0.25, sunVisibility = 
   // Project light direction into screen space for plausible day/night transition.
   const sx = lightCam.x;
   const sy = -lightCam.y;
+  const sz = clamp(lightCam.z, -1, 1);
   const sl = Math.hypot(sx, sy) || 1;
   const nx = sx / sl;
   const ny = sy / sl;
@@ -1515,18 +1514,33 @@ function shadeSphereBySun(screen, rPx, lightCam, glossy = 0.25, sunVisibility = 
   const ambient = clamp(simulation.ambientLight, 0, 1);
   const direct = clamp(simulation.sunLightIntensity * vis, 0, 3);
 
-  const litX = screen.x + nx * rPx * 1.05;
-  const litY = screen.y + ny * rPx * 1.05;
-  const darkX = screen.x - nx * rPx * 1.15;
-  const darkY = screen.y - ny * rPx * 1.15;
+  // Shift terminator by phase (lightCam.z). z=1 => near full phase, z=-1 => near new phase.
+  const phaseShift = sz * rPx * 0.7;
+  const litX = screen.x + nx * (rPx * 1.02 + phaseShift);
+  const litY = screen.y + ny * (rPx * 1.02 + phaseShift);
+  const darkX = screen.x - nx * (rPx * 1.18 - phaseShift);
+  const darkY = screen.y - ny * (rPx * 1.18 - phaseShift);
 
   const terminator = ctx.createLinearGradient(litX, litY, darkX, darkY);
   terminator.addColorStop(0, "rgba(255,255,255,0)");
-  terminator.addColorStop(0.44, `rgba(10,16,28,${clamp(0.04 + (1 - ambient) * 0.06, 0.04, 0.2)})`);
-  terminator.addColorStop(0.76, `rgba(6,10,20,${clamp(0.36 + (1 - direct) * 0.18, 0.25, 0.75)})`);
-  terminator.addColorStop(1, `rgba(3,7,14,${clamp(0.62 + (1 - direct) * 0.26, 0.45, 0.92)})`);
+  terminator.addColorStop(0.34, `rgba(10,16,28,${clamp(0.05 + (1 - ambient) * 0.08, 0.05, 0.3)})`);
+  terminator.addColorStop(0.56, `rgba(6,10,20,${clamp(0.26 + (1 - direct) * 0.26, 0.22, 0.88)})`);
+  terminator.addColorStop(0.76, `rgba(5,9,18,${clamp(0.46 + (1 - direct) * 0.3, 0.38, 0.95)})`);
+  terminator.addColorStop(1, `rgba(3,7,14,${clamp(0.72 + (1 - direct) * 0.24, 0.62, 0.98)})`);
 
   ctx.fillStyle = terminator;
+  ctx.beginPath();
+  ctx.arc(screen.x, screen.y, rPx, 0, TAU);
+  ctx.fill();
+
+  // Diffuse rolloff from the sub-solar point so only sun-facing regions are brightest.
+  const subSolarX = screen.x + nx * rPx * 0.38;
+  const subSolarY = screen.y + ny * rPx * 0.38;
+  const diffuse = ctx.createRadialGradient(subSolarX, subSolarY, rPx * 0.08, screen.x, screen.y, rPx * 1.08);
+  diffuse.addColorStop(0, "rgba(0,0,0,0)");
+  diffuse.addColorStop(0.52, `rgba(0,0,0,${clamp(0.12 + (1 - direct) * 0.2, 0.08, 0.45)})`);
+  diffuse.addColorStop(1, `rgba(0,0,0,${clamp(0.34 + (1 - ambient) * 0.24, 0.22, 0.7)})`);
+  ctx.fillStyle = diffuse;
   ctx.beginPath();
   ctx.arc(screen.x, screen.y, rPx, 0, TAU);
   ctx.fill();
@@ -1541,7 +1555,7 @@ function shadeSphereBySun(screen, rPx, lightCam, glossy = 0.25, sunVisibility = 
   ctx.fill();
 
   if (vis < 0.999) {
-    ctx.fillStyle = `rgba(0,0,0,${(1 - vis) * 0.72})`;
+    ctx.fillStyle = `rgba(0,0,0,${(1 - vis) * 0.84})`;
     ctx.beginPath();
     ctx.arc(screen.x, screen.y, rPx, 0, TAU);
     ctx.fill();
