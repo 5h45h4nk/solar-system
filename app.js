@@ -1,4 +1,6 @@
 const canvas = document.querySelector("#scene");
+const hudEl = document.querySelector(".hud");
+const hudToggleBtn = document.querySelector("#hud-toggle");
 const planetSelect = document.querySelector("#planet-search");
 const speedSlider = document.querySelector("#speed-slider");
 const speedValue = document.querySelector("#speed-value");
@@ -166,6 +168,22 @@ const simulation = {
   daysPerSecond: Number(speedSlider?.value || 40),
   elapsedDays: 0,
 };
+
+function setHudCollapsed(collapsed) {
+  if (!hudEl || !hudToggleBtn) return;
+  hudEl.classList.toggle("collapsed", collapsed);
+  hudToggleBtn.textContent = collapsed ? "Show Controls" : "Hide Controls";
+}
+
+if (window.matchMedia("(max-width: 720px)").matches) {
+  setHudCollapsed(true);
+}
+
+if (hudToggleBtn) {
+  hudToggleBtn.addEventListener("click", () => {
+    setHudCollapsed(!hudEl.classList.contains("collapsed"));
+  });
+}
 
 function loadImage(src, onSuccess) {
   const img = new Image();

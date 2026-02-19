@@ -17,26 +17,31 @@
   <body>
     <div class="hud">
       <div class="title-wrap">
-        <h1>Solar System Explorer</h1>
-        <p>Search any planet and take a guided fly-over.</p>
-      </div>
-      <div class="controls">
-        <label for="planet-search">Planet</label>
-        <select id="planet-search">
-          <option value="" selected>Select a planet...</option>
-        </select>
-        <label for="speed-slider">Orbit Speed (days/second)</label>
-        <input id="speed-slider" type="range" min="0" max="800" step="1" value="40" />
-        <div class="sim-stats">
-          <span id="speed-value">40 days/s</span>
-          <span id="years-value">0.00 years elapsed</span>
+        <div>
+          <h1>Solar System Explorer</h1>
+          <p>Search any planet and take a guided fly-over.</p>
         </div>
-        <button id="fly-btn" type="button">Fly To Planet</button>
-        <button id="overview-btn" type="button">Overview (Sun + All Planets)</button>
+        <button id="hud-toggle" type="button" class="hud-toggle">Hide Controls</button>
       </div>
-      <div id="planet-info" class="planet-info">Loading...</div>
-      <div class="credits">
-        Textures: <a href="https://www.solarsystemscope.com/textures/" target="_blank" rel="noopener noreferrer">Solar System Scope</a>
+      <div class="hud-body">
+        <div class="controls">
+          <label for="planet-search">Planet</label>
+          <select id="planet-search">
+            <option value="" selected>Select a planet...</option>
+          </select>
+          <label for="speed-slider">Orbit Speed (days/second)</label>
+          <input id="speed-slider" type="range" min="0" max="800" step="1" value="40" />
+          <div class="sim-stats">
+            <span id="speed-value">40 days/s</span>
+            <span id="years-value">0.00 years elapsed</span>
+          </div>
+          <button id="fly-btn" type="button">Fly To Planet</button>
+          <button id="overview-btn" type="button">Overview (Sun + All Planets)</button>
+        </div>
+        <div id="planet-info" class="planet-info">Loading...</div>
+        <div class="credits">
+          Textures: <a href="https://www.solarsystemscope.com/textures/" target="_blank" rel="noopener noreferrer">Solar System Scope</a>
+        </div>
       </div>
     </div>
     <canvas id="scene"></canvas>
