@@ -775,6 +775,9 @@ if (zoomOutBtn) {
 let dragging = false;
 let lastX = 0;
 let lastY = 0;
+let pointerDownX = 0;
+let pointerDownY = 0;
+let pointerMovedSinceDown = false;
 let pointerX = -1;
 let pointerY = -1;
 let pointerInside = false;
@@ -793,7 +796,26 @@ function beginPinchIfNeeded() {
   pinchStartRadius = camera.radius;
 }
 
+function pickPlanetAt(x, y) {
+  let picked = null;
+  let nearestDepth = Infinity;
+  for (const p of projectedPlanets) {
+    const dx = x - p.x;
+    const dy = y - p.y;
+    if (dx * dx + dy * dy > p.r * p.r) continue;
+    if (p.zCam < nearestDepth) {
+      nearestDepth = p.zCam;
+      picked = p.planet;
+    }
+  }
+  return picked;
+}
+
 canvas.addEventListener("pointerdown", (e) => {
+  pointerDownX = e.clientX;
+  pointerDownY = e.clientY;
+  pointerMovedSinceDown = false;
+
   if (e.pointerType === "touch") {
     touchPoints.set(e.pointerId, { x: e.clientX, y: e.clientY });
     beginPinchIfNeeded();
@@ -808,6 +830,10 @@ canvas.addEventListener("pointerdown", (e) => {
 });
 
 canvas.addEventListener("pointermove", (e) => {
+  if (Math.hypot(e.clientX - pointerDownX, e.clientY - pointerDownY) > 8) {
+    pointerMovedSinceDown = true;
+  }
+
   if (e.pointerType === "touch") {
     e.preventDefault();
     touchPoints.set(e.pointerId, { x: e.clientX, y: e.clientY });
@@ -856,16 +882,32 @@ canvas.addEventListener("pointermove", (e) => {
 
 canvas.addEventListener("pointerup", (e) => {
   if (e.pointerType === "touch") {
+    const wasTap = !pointerMovedSinceDown && touchPoints.size <= 1;
     touchPoints.delete(e.pointerId);
     if (touchPoints.size !== 2) {
       pinchStartDistance = 0;
       pinchStartRadius = camera.radius;
+    }
+    if (wasTap) {
+      const rect = canvas.getBoundingClientRect();
+      const px = e.clientX - rect.left;
+      const py = e.clientY - rect.top;
+      const picked = pickPlanetAt(px, py);
+      if (picked) flyToPlanet(picked);
     }
     dragging = false;
     if (canvas.hasPointerCapture(e.pointerId)) {
       canvas.releasePointerCapture(e.pointerId);
     }
     return;
+  }
+
+  if (!pointerMovedSinceDown) {
+    const rect = canvas.getBoundingClientRect();
+    const px = e.clientX - rect.left;
+    const py = e.clientY - rect.top;
+    const picked = pickPlanetAt(px, py);
+    if (picked) flyToPlanet(picked);
   }
 
   dragging = false;
